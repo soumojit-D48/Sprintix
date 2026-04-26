@@ -1,0 +1,7 @@
+[install]
+frozen-lockfile = false
+
+[test]
+coverage = true
+coverageDir = "coverage"
+coverageReporter = ["text", "lcov"]

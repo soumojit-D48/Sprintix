@@ -43,3 +43,6 @@ next-env.d.ts
 docs
 
 !.env.example
+/generated/prisma
+
+.vscode

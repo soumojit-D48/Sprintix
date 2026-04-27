@@ -5,7 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "db:push": "bunx prisma db push",
+    "db:migrate": "bunx prisma migrate dev",
+    "db:generate": "bunx prisma generate",
+    "db:studio": "bunx prisma studio",
+    "db:seed": "bun prisma/seed.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",

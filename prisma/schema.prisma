@@ -1,0 +1,361 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // url       = env("DATABASE_URL")
+  // directUrl = env("DIRECT_URL")
+}
+
+//  Users 
+
+model User {
+  id               String            @id @default(cuid())
+  clerkId          String            @unique
+  email            String            @unique
+  name             String
+  avatarUrl        String?
+  createdAt        DateTime          @default(now())
+  workspaceMembers WorkspaceMember[]
+  assignedIssues   Issue[]           @relation("AssignedIssues")
+  reportedIssues   Issue[]           @relation("ReportedIssues")
+  comments         Comment[]
+  notifications    Notification[]
+  sentMessages     Message[]
+  activityLogs     ActivityLog[]
+}
+
+//  Workspaces 
+
+model Workspace {
+  id               String            @id @default(cuid())
+  name             String
+  slug             String            @unique
+  logoUrl          String?
+  plan             Plan              @default(FREE)
+  stripeCustomerId String?
+  createdAt        DateTime          @default(now())
+  members          WorkspaceMember[]
+  projects         Project[]
+  channels         Channel[]
+  invites          Invite[]
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        Role      @default(MEMBER)
+  joinedAt    DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id])
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([userId, workspaceId])
+}
+
+//  Projects
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  icon        String?
+  color       String?
+  status      ProjectStatus @default(ACTIVE)
+  workspaceId String
+  leadId      String?
+  startDate   DateTime?
+  targetDate  DateTime?
+  identifier  String
+  issueCount  Int           @default(0)
+  createdAt   DateTime      @default(now())
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id])
+  issues      Issue[]
+  sprints     Sprint[]
+}
+
+//  Issues 
+
+model Issue {
+  id           String        @id @default(cuid())
+  identifier   String
+  title        String
+  description  Json?
+  status       IssueStatus   @default(BACKLOG)
+  priority     Priority      @default(MEDIUM)
+  projectId    String
+  assigneeId   String?
+  reporterId   String
+  sprintId     String?
+  parentId     String?
+  dueDate      DateTime?
+  order        Float         @default(0)
+  deletedAt    DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  project      Project       @relation(fields: [projectId], references: [id])
+  assignee     User?         @relation("AssignedIssues", fields: [assigneeId], references: [id])
+  reporter     User          @relation("ReportedIssues", fields: [reporterId], references: [id])
+  sprint       Sprint?       @relation(fields: [sprintId], references: [id])
+  parent       Issue?        @relation("SubIssues", fields: [parentId], references: [id])
+  subIssues    Issue[]       @relation("SubIssues")
+  comments     Comment[]
+  attachments  Attachment[]
+  activityLogs ActivityLog[]
+  labels       IssueLabel[]
+}
+
+//  Labels ─────
+
+model Label {
+  id          String       @id @default(cuid())
+  name        String
+  color       String
+  workspaceId String
+  issues      IssueLabel[]
+}
+
+model IssueLabel {
+  issueId String
+  labelId String
+  issue   Issue  @relation(fields: [issueId], references: [id])
+  label   Label  @relation(fields: [labelId], references: [id])
+
+  @@id([issueId, labelId])
+}
+
+//  Comments ───
+
+model Comment {
+  id        String     @id @default(cuid())
+  body      Json
+  issueId   String
+  authorId  String
+  parentId  String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  deletedAt DateTime?
+  issue     Issue      @relation(fields: [issueId], references: [id])
+  author    User       @relation(fields: [authorId], references: [id])
+  parent    Comment?   @relation("Replies", fields: [parentId], references: [id])
+  replies   Comment[]  @relation("Replies")
+  reactions Reaction[]
+}
+
+model Reaction {
+  id        String  @id @default(cuid())
+  emoji     String
+  userId    String
+  commentId String
+  comment   Comment @relation(fields: [commentId], references: [id])
+
+  @@unique([userId, commentId, emoji])
+}
+
+//  Attachments 
+
+model Attachment {
+  id           String   @id @default(cuid())
+  name         String
+  url          String
+  size         Int
+  mimeType     String
+  issueId      String
+  uploadedById String
+  createdAt    DateTime @default(now())
+  issue        Issue    @relation(fields: [issueId], references: [id])
+}
+
+//  Activity Log ────────────
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  action     String
+  metadata   Json
+  userId     String
+  createdAt  DateTime @default(now())
+  issue      Issue?   @relation(fields: [entityId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+//  Sprints ────
+
+model Sprint {
+  id        String       @id @default(cuid())
+  name      String
+  projectId String
+  status    SprintStatus @default(PLANNED)
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime     @default(now())
+  project   Project      @relation(fields: [projectId], references: [id])
+  issues    Issue[]
+}
+
+//  Notifications ───────────
+
+model Notification {
+  id         String           @id @default(cuid())
+  userId     String
+  type       NotificationType
+  title      String
+  body       String?
+  read       Boolean          @default(false)
+  entityId   String?
+  entityType String?
+  createdAt  DateTime         @default(now())
+  user       User             @relation(fields: [userId], references: [id])
+}
+
+//  Invites ────
+
+model Invite {
+  id          String    @id @default(cuid())
+  email       String
+  workspaceId String
+  role        Role      @default(MEMBER)
+  token       String    @unique @default(cuid())
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+}
+
+//  Chat ───────
+
+model Channel {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  type        ChannelType     @default(PUBLIC)
+  workspaceId String
+  createdById String
+  archivedAt  DateTime?
+  createdAt   DateTime        @default(now())
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id])
+  members     ChannelMember[]
+  messages    Message[]
+}
+
+model ChannelMember {
+  channelId  String
+  userId     String
+  joinedAt   DateTime  @default(now())
+  lastReadAt DateTime?
+  channel    Channel   @relation(fields: [channelId], references: [id])
+
+  @@id([channelId, userId])
+}
+
+model Message {
+  id            String              @id @default(cuid())
+  body          Json
+  channelId     String?
+  dmId          String?
+  senderId      String
+  parentId      String?
+  editedAt      DateTime?
+  deletedAt     DateTime?
+  createdAt     DateTime            @default(now())
+  channel       Channel?            @relation(fields: [channelId], references: [id])
+  directMessage DirectMessage?      @relation(fields: [dmId], references: [id])
+  sender        User                @relation(fields: [senderId], references: [id])
+  parent        Message?            @relation("Threads", fields: [parentId], references: [id])
+  replies       Message[]           @relation("Threads")
+  reactions     MessageReaction[]
+  attachments   MessageAttachment[]
+}
+
+model MessageReaction {
+  id        String  @id @default(cuid())
+  emoji     String
+  userId    String
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id])
+
+  @@unique([userId, messageId, emoji])
+}
+
+model MessageAttachment {
+  id        String  @id @default(cuid())
+  name      String
+  url       String
+  size      Int
+  mimeType  String
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id])
+}
+
+model DirectMessage {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  participantIds String[]
+  createdAt      DateTime  @default(now())
+  messages       Message[]
+}
+
+//  Enums ──────
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum ProjectStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+  COMPLETED
+}
+
+enum IssueStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  CANCELLED
+}
+
+enum Priority {
+  URGENT
+  HIGH
+  MEDIUM
+  LOW
+  NO_PRIORITY
+}
+
+enum SprintStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+}
+
+enum NotificationType {
+  ASSIGNED
+  MENTIONED
+  COMMENTED
+  STATUS_CHANGED
+  DUE_SOON
+  INVITED
+  MESSAGE_RECEIVED
+}
+
+enum ChannelType {
+  PUBLIC
+  PRIVATE
+  DM
+}

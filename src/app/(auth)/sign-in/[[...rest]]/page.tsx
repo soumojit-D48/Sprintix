@@ -11,6 +11,7 @@ export default function SignInPage() {
           },
         },
       }}
+      forceRedirectUrl="/onboarding"
     />
   )
 }

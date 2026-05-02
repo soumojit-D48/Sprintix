@@ -27,13 +27,24 @@ export const workspaceRouter = router({
         })
       }
 
+      const user = await prisma.user.findUnique({
+        where: { clerkId: ctx.userId },
+      })
+
+      if (!user) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'Current user is not registered in the database.',
+        })
+      }
+
       const workspace = await prisma.workspace.create({
         data: {
           name: input.name,
           slug: input.slug,
           members: {
             create: {
-              userId: ctx.userId,
+              userId: user.id,
               role: 'OWNER',
             },
           },

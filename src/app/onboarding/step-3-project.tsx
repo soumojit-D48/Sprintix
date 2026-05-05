@@ -28,7 +28,7 @@ export function Step3CreateProject() {
     onSuccess: (project) => {
       const workspace = getWorkspace.data?.[0]
       if (workspace) {
-        router.push(`/${workspace.slug}/${project.identifier}`)
+        router.push(`/${workspace.slug}`)
       }
     },
     onError: (err) => {

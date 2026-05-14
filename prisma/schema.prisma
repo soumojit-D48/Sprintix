@@ -32,18 +32,19 @@ model User {
 //  Workspaces 
 
 model Workspace {
-  id               String            @id @default(cuid())
-  name             String
-  slug             String            @unique
-  logoUrl          String?
-  plan             Plan              @default(FREE)
-  stripeCustomerId String?
-  createdAt        DateTime          @default(now())
-  members          WorkspaceMember[]
-  projects         Project[]
-  channels         Channel[]
-  invites          Invite[]
-}
+   id               String            @id @default(cuid())
+   name             String
+   slug             String            @unique
+   previousSlugs    String[]          @default([])
+   logoUrl          String?
+   plan             Plan              @default(FREE)
+   stripeCustomerId String?
+   createdAt        DateTime          @default(now())
+   members          WorkspaceMember[]
+   projects         Project[]
+   channels         Channel[]
+   invites          Invite[]
+ }
 
 model WorkspaceMember {
   id          String    @id @default(cuid())

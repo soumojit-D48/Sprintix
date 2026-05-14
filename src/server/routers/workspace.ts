@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { router, protectedProcedure } from '../trpc'
+import { router, protectedProcedure, ownerProcedure } from '../trpc'
 import { prisma } from '@/lib/prisma'
 import { TRPCError } from '@trpc/server'
 
@@ -42,6 +42,7 @@ export const workspaceRouter = router({
         data: {
           name: input.name,
           slug: input.slug,
+          previousSlugs: { set: [] },
           members: {
             create: {
               userId: user.id,
@@ -55,6 +56,161 @@ export const workspaceRouter = router({
       })
 
       return workspace
+    }),
+
+  update: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string(),
+        name: z.string().min(1).max(100).optional(),
+        slug: z
+          .string()
+          .min(1)
+          .max(50)
+          .regex(/^[a-z0-9-]+$/)
+          .optional(),
+        logoUrl: z.string().url().nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Check if user is owner of this workspace
+      const membership = await prisma.workspaceMember.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          user: { clerkId: ctx.userId },
+          role: 'OWNER',
+        },
+      })
+
+      if (!membership) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Only the workspace owner can perform this action.',
+        })
+      }
+
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: input.workspaceId },
+      })
+
+      if (!workspace) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Workspace not found.',
+        })
+      }
+
+      const updateData: Record<string, unknown> = {}
+
+      if (input.name !== undefined) {
+        updateData.name = input.name
+      }
+
+      if (input.logoUrl !== undefined) {
+        updateData.logoUrl = input.logoUrl
+      }
+
+      if (input.slug && input.slug !== workspace.slug) {
+        const slugExists = await prisma.workspace.findFirst({
+          where: {
+            slug: input.slug,
+            id: { not: input.workspaceId },
+          },
+        })
+
+        if (slugExists) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Workspace with this slug already exists.',
+          })
+        }
+
+        updateData.slug = input.slug
+        updateData.previousSlugs = {
+          push: workspace.slug,
+        }
+      }
+
+      const updatedWorkspace = await prisma.workspace.update({
+        where: { id: input.workspaceId },
+        data: updateData,
+      })
+
+      return updatedWorkspace
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: input.workspaceId },
+        include: {
+          members: {
+            include: {
+              user: true,
+            },
+          },
+        },
+      })
+
+      if (!workspace) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Workspace not found.',
+        })
+      }
+
+      // Check if the current user is the owner by comparing clerkId
+      const isOwner = workspace.members.some(
+        (m) => m.user.clerkId === ctx.userId && m.role === 'OWNER'
+      )
+
+      if (!isOwner) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Only the workspace owner can delete the workspace.',
+        })
+      }
+
+      if (workspace.members.length <= 1) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot delete a workspace with only one member. Transfer ownership first.',
+        })
+      }
+
+      await prisma.workspace.delete({
+        where: { id: input.workspaceId },
+      })
+
+      return { success: true }
+    }),
+
+  getBySlug: protectedProcedure
+    .input(z.object({ slug: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const workspaceMember = await prisma.workspaceMember.findFirst({
+        where: {
+          workspace: {
+            slug: input.slug,
+          },
+          user: {
+            clerkId: ctx.userId,
+          },
+        },
+        include: {
+          workspace: true,
+        },
+      })
+
+      if (!workspaceMember) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Workspace not found.',
+        })
+      }
+
+      return workspaceMember.workspace
     }),
 
   getUserWorkspaces: protectedProcedure.query(async ({ ctx }) => {
@@ -98,6 +254,35 @@ export const workspaceRouter = router({
 
       return workspaceMember.workspace
     }),
+
+  resolveSlug: protectedProcedure.input(z.object({ slug: z.string() })).query(async ({ input }) => {
+    // First try exact match
+    const workspace = await prisma.workspace.findUnique({
+      where: { slug: input.slug },
+    })
+
+    if (workspace) {
+      return { workspace, isCurrentSlug: true }
+    }
+
+    // Check if this is a previous slug
+    const workspaceWithPreviousSlug = await prisma.workspace.findFirst({
+      where: {
+        previousSlugs: {
+          has: input.slug,
+        },
+      },
+    })
+
+    if (workspaceWithPreviousSlug) {
+      return { workspace: workspaceWithPreviousSlug, isCurrentSlug: false }
+    }
+
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: 'Workspace not found.',
+    })
+  }),
 
   inviteMembers: protectedProcedure
     .input(

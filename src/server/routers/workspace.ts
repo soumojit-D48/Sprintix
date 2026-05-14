@@ -172,13 +172,41 @@ export const workspaceRouter = router({
         })
       }
 
-      if (workspace.members.length <= 1) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Cannot delete a workspace with only one member. Transfer ownership first.',
+      // Delete related records first to avoid FK constraint violations
+      await prisma.$transaction([
+        // Delete all workspace members
+        prisma.workspaceMember.deleteMany({
+          where: { workspaceId: input.workspaceId },
+        }),
+        // Delete all invites
+        prisma.invite.deleteMany({
+          where: { workspaceId: input.workspaceId },
+        }),
+        // Delete all channels
+        prisma.channel.deleteMany({
+          where: { workspaceId: input.workspaceId },
+        }),
+      ])
+
+      // Delete projects (this will cascade to issues, comments, etc.)
+      const projects = await prisma.project.findMany({
+        where: { workspaceId: input.workspaceId },
+        select: { id: true },
+      })
+
+      for (const project of projects) {
+        // Delete issues for each project (cascade handles this, but let's be explicit)
+        await prisma.issue.deleteMany({
+          where: { projectId: project.id },
         })
       }
 
+      // Delete projects
+      await prisma.project.deleteMany({
+        where: { workspaceId: input.workspaceId },
+      })
+
+      // Finally delete the workspace
       await prisma.workspace.delete({
         where: { id: input.workspaceId },
       })

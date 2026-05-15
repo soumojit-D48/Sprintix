@@ -33,6 +33,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User not found. Please sign up first.' }, { status: 404 })
     }
 
+    // SECURITY: Verify the user's email matches the invited email
+    if (user.email.toLowerCase() !== invite.email.toLowerCase()) {
+      return NextResponse.json(
+        { error: 'This invitation was sent to a different email address' },
+        { status: 403 }
+      )
+    }
+
     const existingMember = await prisma.workspaceMember.findFirst({
       where: {
         workspaceId: invite.workspaceId,

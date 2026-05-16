@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { router, protectedProcedure, adminProcedure } from '../trpc'
+import { router, protectedProcedure } from '../trpc'
 import { prisma } from '@/lib/prisma'
 import { TRPCError } from '@trpc/server'
 
@@ -65,7 +65,7 @@ export const projectRouter = router({
       return project
     }),
 
-  update: adminProcedure
+  update: protectedProcedure
     .input(
       z.object({
         projectId: z.string(),
@@ -122,7 +122,7 @@ export const projectRouter = router({
       })
     }),
 
-  archive: adminProcedure
+  archive: protectedProcedure
     .input(z.object({ projectId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const project = await prisma.project.findUnique({
@@ -154,7 +154,7 @@ export const projectRouter = router({
       })
     }),
 
-  delete: adminProcedure
+  delete: protectedProcedure
     .input(
       z.object({
         projectId: z.string(),

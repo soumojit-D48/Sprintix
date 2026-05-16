@@ -1,10 +1,15 @@
-import { redirect } from 'next/navigation'
+'use client'
 
-export default async function ProjectRootPage({
-  params,
-}: {
-  params: Promise<{ workspaceSlug: string; projectId: string }>
-}) {
-  const { workspaceSlug, projectId } = await params
-  redirect(`/${workspaceSlug}/projects/${projectId}/board`)
+import { useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+
+export default function ProjectRootRedirect() {
+  const params = useParams()
+  const router = useRouter()
+
+  useEffect(() => {
+    router.replace(`/${params.workspaceSlug}/projects/${params.projectId}/board`)
+  }, [params.workspaceSlug, params.projectId, router])
+
+  return null
 }

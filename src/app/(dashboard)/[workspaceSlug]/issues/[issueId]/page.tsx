@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2, ExternalLink, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Trash2, Tag, MessageSquare } from 'lucide-react'
 import { trpc } from '@/lib/trpc/provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,8 +14,10 @@ import { IssueStatusSelect } from '@/components/issues/IssueStatusSelect'
 import { IssuePrioritySelect } from '@/components/issues/IssuePrioritySelect'
 import { IssueAssigneeSelect } from '@/components/issues/IssueAssigneeSelect'
 import { IssueDueDatePicker } from '@/components/issues/IssueDueDatePicker'
+import { IssueLabelSelect } from '@/components/issues/IssueLabelSelect'
 import { IssueIdentifier } from '@/components/issues/IssueIdentifier'
 import { IssueSubIssues } from '@/components/issues/IssueSubIssues'
+import { cn } from '@/lib/utils'
 
 export default function IssueDetailPage() {
   const params = useParams()
@@ -27,6 +29,10 @@ export default function IssueDetailPage() {
   const { data: workspace } = trpc.workspace.getBySlug.useQuery({ slug: workspaceSlug })
 
   const { data: members } = trpc.member.list.useQuery(
+    { workspaceId: workspace?.id ?? '' },
+    { enabled: !!workspace?.id }
+  )
+  const { data: labelsData } = trpc.label.list.useQuery(
     { workspaceId: workspace?.id ?? '' },
     { enabled: !!workspace?.id }
   )
@@ -42,17 +48,33 @@ export default function IssueDetailPage() {
     }
   }, [issue])
 
+  const utils = trpc.useUtils()
+
   const updateMutation = trpc.issue.update.useMutation({
-    onSuccess: () => {
-      refetch()
-    },
+    onSuccess: () => refetch(),
     onError: (err) => toast.error(err.message),
   })
 
   const deleteMutation = trpc.issue.delete.useMutation({
     onSuccess: () => {
       toast.success('Issue deleted')
-      router.push(`/${workspaceSlug}/projects/${issue?.projectId}`)
+      router.push(`/${workspaceSlug}/projects/${issue?.projectId}/board`)
+    },
+    onError: (err) => toast.error(err.message),
+  })
+
+  const addLabelMutation = trpc.issue.addLabel.useMutation({
+    onSuccess: () => {
+      refetch()
+      utils.issue.list.invalidate()
+    },
+    onError: (err) => toast.error(err.message),
+  })
+
+  const removeLabelMutation = trpc.issue.removeLabel.useMutation({
+    onSuccess: () => {
+      refetch()
+      utils.issue.list.invalidate()
     },
     onError: (err) => toast.error(err.message),
   })
@@ -76,6 +98,15 @@ export default function IssueDetailPage() {
     }
   }
 
+  function handleLabelToggle(labelId: string) {
+    const currentIds = issue?.labels?.map((l) => l.labelId) ?? []
+    if (currentIds.includes(labelId)) {
+      removeLabelMutation.mutate({ issueId, labelId })
+    } else {
+      addLabelMutation.mutate({ issueId, labelId })
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -95,8 +126,11 @@ export default function IssueDetailPage() {
     )
   }
 
+  const selectedLabelIds = issue.labels?.map((l) => l.labelId) ?? []
+
   return (
     <div className="mx-auto flex h-full max-w-5xl flex-col">
+      {/* Breadcrumb bar */}
       <div className="flex items-center gap-2 border-b px-6 py-2">
         <button
           type="button"
@@ -112,9 +146,12 @@ export default function IssueDetailPage() {
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="space-y-6 p-6">
-          <div className="grid grid-cols-[1fr_240px] gap-8">
-            <div className="space-y-6">
+        <div className="p-6">
+          {/* Two-column layout: 60% main / 40% sidebar */}
+          <div className="grid grid-cols-[1fr_260px] gap-8">
+            {/* ─── Main column ─── */}
+            <div className="space-y-6 min-w-0">
+              {/* Editable title */}
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -125,6 +162,7 @@ export default function IssueDetailPage() {
                 className="hover:border-border focus:border-border -ml-2 border-transparent text-xl font-semibold"
               />
 
+              {/* Description */}
               <div>
                 <h4 className="text-muted-foreground mb-2 text-xs font-medium tracking-wider uppercase">
                   Description
@@ -141,84 +179,126 @@ export default function IssueDetailPage() {
 
               <Separator />
 
+              {/* Sub-issues */}
               <IssueSubIssues
                 issueId={issue.id}
                 projectId={issue.projectId}
                 workspaceSlug={workspaceSlug}
               />
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-3">
-                <Field label="Status">
-                  <IssueStatusSelect
-                    value={issue.status}
-                    onChange={(v) => handleFieldUpdate('status', v)}
-                    size="sm"
-                  />
-                </Field>
-                <Field label="Priority">
-                  <IssuePrioritySelect
-                    value={issue.priority}
-                    onChange={(v) => handleFieldUpdate('priority', v)}
-                    size="sm"
-                  />
-                </Field>
-                <Field label="Assignee">
-                  <IssueAssigneeSelect
-                    value={issue.assigneeId}
-                    onChange={(v) => handleFieldUpdate('assigneeId', v)}
-                    members={members ?? []}
-                    size="sm"
-                  />
-                </Field>
-                <Field label="Due Date">
-                  <IssueDueDatePicker
-                    value={issue.dueDate ? new Date(issue.dueDate) : null}
-                    onChange={(d) => handleFieldUpdate('dueDate', d?.toISOString() ?? null)}
-                    size="sm"
-                  />
-                </Field>
-              </div>
 
               <Separator />
 
+              {/* Activity & Comments placeholder (wired in Phase 13) */}
+              <div>
+                <div className="mb-3 flex items-center gap-2">
+                  <MessageSquare className="text-muted-foreground size-4" />
+                  <h4 className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+                    Activity & Comments
+                  </h4>
+                  {issue._count.comments > 0 && (
+                    <span className="text-muted-foreground text-xs">
+                      ({issue._count.comments})
+                    </span>
+                  )}
+                </div>
+                <div className="border-border rounded-lg border border-dashed p-6 text-center">
+                  <MessageSquare className="text-muted-foreground/30 mx-auto mb-2 size-8" />
+                  <p className="text-muted-foreground text-sm">
+                    Activity feed and comments will be available soon.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* ─── Sidebar ─── */}
+            <div className="space-y-4">
+              {/* Status */}
+              <Field label="Status">
+                <IssueStatusSelect
+                  value={issue.status}
+                  onChange={(v) => handleFieldUpdate('status', v)}
+                  size="sm"
+                />
+              </Field>
+
+              {/* Priority */}
+              <Field label="Priority">
+                <IssuePrioritySelect
+                  value={issue.priority}
+                  onChange={(v) => handleFieldUpdate('priority', v)}
+                  size="sm"
+                />
+              </Field>
+
+              {/* Assignee */}
+              <Field label="Assignee">
+                <IssueAssigneeSelect
+                  value={issue.assigneeId}
+                  onChange={(v) => handleFieldUpdate('assigneeId', v)}
+                  members={members ?? []}
+                  size="sm"
+                />
+              </Field>
+
+              {/* Due Date */}
+              <Field label="Due Date">
+                <IssueDueDatePicker
+                  value={issue.dueDate ? new Date(issue.dueDate) : null}
+                  onChange={(d) => handleFieldUpdate('dueDate', d?.toISOString() ?? null)}
+                  size="sm"
+                />
+              </Field>
+
+              {/* Labels — editable inline */}
+              <Field label="Labels">
+                <IssueLabelSelect
+                  selectedIds={selectedLabelIds}
+                  labels={labelsData ?? []}
+                  onToggle={handleLabelToggle}
+                  size="sm"
+                />
+              </Field>
+
+              <Separator />
+
+              {/* Read-only metadata */}
               <div className="space-y-2 text-xs">
                 <MetaRow label="Reporter" value={issue.reporter?.name ?? 'Unknown'} />
                 {issue.sprint && <MetaRow label="Sprint" value={issue.sprint.name} />}
                 {issue.parent && (
                   <MetaRow
                     label="Parent"
-                    value={`${issue.parent.identifier} - ${issue.parent.title}`}
+                    value={`${issue.parent.identifier} — ${issue.parent.title}`}
                   />
                 )}
-                {issue.labels?.length > 0 && (
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {issue.labels.map(({ label }) => (
-                      <span
-                        key={label.id}
-                        className="inline-block rounded-md border px-1.5 py-0.5 text-xs"
-                        style={{
-                          backgroundColor: label.color + '20',
-                          color: label.color,
-                          borderColor: label.color + '40',
-                        }}
-                      >
-                        {label.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                <MetaRow
+                  label="Created"
+                  value={new Date(issue.createdAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                />
+                <MetaRow
+                  label="Updated"
+                  value={new Date(issue.updatedAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                />
               </div>
 
               <Separator />
 
+              {/* Danger zone */}
               <Button
                 variant="destructive"
                 size="sm"
                 className="w-full"
+                disabled={deleteMutation.isPending}
                 onClick={() => {
-                  if (confirm('Delete this issue?')) {
+                  if (confirm(`Delete issue ${issue.identifier}? This cannot be undone.`)) {
                     deleteMutation.mutate({ issueId: issue.id })
                   }
                 }}
@@ -245,8 +325,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function MetaRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-muted-foreground min-w-[60px]">{label}:</span>
+    <div className="flex items-start gap-2">
+      <span className="text-muted-foreground min-w-[64px] shrink-0">{label}:</span>
       <span className="truncate">{value}</span>
     </div>
   )

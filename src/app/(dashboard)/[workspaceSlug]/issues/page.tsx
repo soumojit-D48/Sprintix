@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ListChecks, Circle } from 'lucide-react'
+import { ListChecks, Circle, Clock, AlertCircle } from 'lucide-react'
 import { trpc } from '@/lib/trpc/provider'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
@@ -20,12 +20,12 @@ const statusColors: Record<string, string> = {
   CANCELLED: 'text-red-400',
 }
 
-const priorityOrder: Record<string, number> = {
-  URGENT: 0,
-  HIGH: 1,
-  MEDIUM: 2,
-  LOW: 3,
-  NO_PRIORITY: 4,
+const priorityColors: Record<string, string> = {
+  URGENT: 'text-red-500',
+  HIGH: 'text-orange-500',
+  MEDIUM: 'text-yellow-500',
+  LOW: 'text-blue-500',
+  NO_PRIORITY: 'text-muted-foreground',
 }
 
 const FILTER_TABS = [
@@ -44,67 +44,56 @@ export default function MyIssuesPage() {
   const [activeTab, setActiveTab] = useState('ALL')
 
   const { data: workspace } = trpc.workspace.getBySlug.useQuery({ slug: workspaceSlug })
-  const { data: user } = trpc.workspace.getBySlug.useQuery({ slug: workspaceSlug })
-  const { data: currentMember } = trpc.member.getCurrentMember.useQuery(
+
+  // Single query for all issues assigned to current user — no hooks-in-loop
+  const { data: myIssues = [], isLoading } = trpc.issue.listForCurrentUser.useQuery(
     { workspaceId: workspace?.id ?? '' },
     { enabled: !!workspace?.id }
   )
-  const { data: projects } = trpc.project.list.useQuery(
-    { workspaceId: workspace?.id ?? '' },
-    { enabled: !!workspace?.id }
-  )
 
-  const projectIds = projects?.map((p) => p.id) ?? []
+  const now = new Date()
+  const todayStr = now.toDateString()
 
-  const allIssues = projectIds.map((projectId) =>
-    trpc.issue.list.useQuery(
-      { projectId, limit: 200, sortBy: 'priority', sortOrder: 'asc' },
-      { enabled: projectIds.length > 0 }
-    )
-  )
+  const filteredIssues = myIssues.filter((i) => {
+    if (activeTab === 'ALL') return true
+    if (activeTab === 'ACTIVE') return !['DONE', 'CANCELLED'].includes(i.status)
+    if (activeTab === 'IN_PROGRESS') return i.status === 'IN_PROGRESS'
+    if (activeTab === 'TODO') return i.status === 'TODO'
+    if (activeTab === 'OVERDUE') return !!i.dueDate && new Date(i.dueDate) < now
+    if (activeTab === 'DUE_TODAY')
+      return !!i.dueDate && new Date(i.dueDate).toDateString() === todayStr
+    if (activeTab === 'NO_DUE_DATE') return !i.dueDate
+    return true
+  })
 
-  const isLoading = allIssues.some((q) => q.isLoading)
-
-  const myIssues = allIssues
-    .flatMap((q) => q.data?.issues ?? [])
-    .filter((i) => {
-      if (!currentMember) return false
-      return i.assignee?.id === currentMember.userId
-    })
-    .filter((i) => {
-      if (activeTab === 'ALL') return true
-      if (activeTab === 'ACTIVE') return !['DONE', 'CANCELLED'].includes(i.status)
-      if (activeTab === 'OVERDUE') return i.dueDate && new Date(i.dueDate) < new Date()
-      if (activeTab === 'DUE_TODAY') {
-        const today = new Date()
-        return i.dueDate && new Date(i.dueDate).toDateString() === today.toDateString()
-      }
-      if (activeTab === 'NO_DUE_DATE') return !i.dueDate
-      return i.status === activeTab
-    })
-    .sort((a, b) => (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99))
-
-  const groupedByProject = projects?.reduce(
-    (acc, project) => {
-      const projectIssues = myIssues.filter((i) => i.projectId === project.id)
-      if (projectIssues.length > 0) {
-        acc[project.id] = { project, issues: projectIssues }
-      }
-      return acc
-    },
-    {} as Record<string, { project: (typeof projects)[0]; issues: typeof myIssues }>
-  )
+  // Group by project
+  const groupedByProject = filteredIssues.reduce<
+    Record<
+      string,
+      { projectId: string; projectName: string; projectColor: string; issues: typeof filteredIssues }
+    >
+  >((acc, issue) => {
+    const p = issue.project
+    if (!p) return acc
+    if (!acc[p.id]) {
+      acc[p.id] = { projectId: p.id, projectName: p.name, projectColor: p.color ?? '#3B82F6', issues: [] }
+    }
+    acc[p.id]!.issues.push(issue)
+    return acc
+  }, {})
 
   return (
     <main className="flex-1 overflow-auto">
       <div className="container mx-auto px-6 py-8">
+        {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold tracking-tight">My Issues</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            {myIssues.length} issue{myIssues.length !== 1 ? 's' : ''} assigned to you
+            {filteredIssues.length} issue{filteredIssues.length !== 1 ? 's' : ''} assigned to you
           </p>
         </div>
 
+        {/* Filter tabs */}
         <div className="mb-6 flex flex-wrap gap-1">
           {FILTER_TABS.map((tab) => (
             <button
@@ -123,13 +112,14 @@ export default function MyIssuesPage() {
           ))}
         </div>
 
+        {/* Content */}
         {isLoading ? (
           <div className="space-y-4">
             {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} className="h-16 w-full rounded-lg" />
             ))}
           </div>
-        ) : myIssues.length === 0 ? (
+        ) : filteredIssues.length === 0 ? (
           <div className="border-border flex flex-col items-center justify-center rounded-lg border border-dashed p-12">
             <ListChecks className="text-muted-foreground mb-4 size-12" />
             <h3 className="mb-1 text-lg font-semibold">No issues found</h3>
@@ -141,29 +131,35 @@ export default function MyIssuesPage() {
           </div>
         ) : (
           <div className="space-y-8">
-            {groupedByProject &&
-              Object.values(groupedByProject).map(({ project, issues }) => (
-                <div key={project.id}>
-                  <div className="mb-3 flex items-center gap-2">
-                    <div
-                      className="size-3 rounded-full"
-                      style={{ backgroundColor: project.color || '#3B82F6' }}
-                    />
-                    <Link
-                      href={`/${workspaceSlug}/projects/${project.id}/board`}
-                      className="text-sm font-semibold hover:underline"
-                    >
-                      {project.name}
-                    </Link>
-                    <span className="text-muted-foreground text-xs">{issues.length}</span>
-                  </div>
+            {Object.values(groupedByProject).map(({ projectId, projectName, projectColor, issues }) => (
+              <div key={projectId}>
+                {/* Project group header */}
+                <div className="mb-3 flex items-center gap-2">
+                  <div
+                    className="size-3 rounded-full"
+                    style={{ backgroundColor: projectColor || '#3B82F6' }}
+                  />
+                  <Link
+                    href={`/${workspaceSlug}/projects/${projectId}/board`}
+                    className="text-sm font-semibold hover:underline"
+                  >
+                    {projectName}
+                  </Link>
+                  <span className="text-muted-foreground text-xs">{issues.length}</span>
+                </div>
 
-                  <div className="space-y-1">
-                    {issues.map((issue) => (
+                {/* Issues in this project */}
+                <div className="space-y-1">
+                  {issues.map((issue) => {
+                    const isOverdue = !!issue.dueDate && new Date(issue.dueDate) < now
+                    const isDueToday =
+                      !!issue.dueDate && new Date(issue.dueDate).toDateString() === todayStr
+
+                    return (
                       <Link
                         key={issue.id}
                         href={`/${workspaceSlug}/issues/${issue.id}`}
-                        className="hover:bg-muted/50 flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors"
+                        className="hover:bg-muted/50 group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors"
                       >
                         <Circle
                           className={cn(
@@ -173,21 +169,44 @@ export default function MyIssuesPage() {
                         />
                         <IssueIdentifier identifier={issue.identifier} />
                         <span className="flex-1 truncate text-sm">{issue.title}</span>
+
+                        {/* Priority badge */}
+                        {issue.priority !== 'NO_PRIORITY' && (
+                          <span
+                            className={cn(
+                              'hidden shrink-0 text-xs font-medium sm:inline',
+                              priorityColors[issue.priority] ?? ''
+                            )}
+                          >
+                            {issue.priority.charAt(0) + issue.priority.slice(1).toLowerCase()}
+                          </span>
+                        )}
+
+                        {/* Due date */}
                         {issue.dueDate && (
                           <span
                             className={cn(
-                              'shrink-0 text-xs',
-                              new Date(issue.dueDate) < new Date()
+                              'flex shrink-0 items-center gap-1 text-xs',
+                              isOverdue
                                 ? 'text-destructive font-medium'
-                                : 'text-muted-foreground'
+                                : isDueToday
+                                  ? 'text-orange-500 font-medium'
+                                  : 'text-muted-foreground'
                             )}
                           >
+                            {isOverdue ? (
+                              <AlertCircle className="size-3" />
+                            ) : isDueToday ? (
+                              <Clock className="size-3" />
+                            ) : null}
                             {new Date(issue.dueDate).toLocaleDateString('en-US', {
                               month: 'short',
                               day: 'numeric',
                             })}
                           </span>
                         )}
+
+                        {/* Labels */}
                         {issue.labels && issue.labels.length > 0 && (
                           <div className="hidden gap-1 md:flex">
                             {issue.labels.slice(0, 2).map(({ label }) => (
@@ -206,6 +225,8 @@ export default function MyIssuesPage() {
                             ))}
                           </div>
                         )}
+
+                        {/* Assignee avatar */}
                         {issue.assignee && (
                           <Avatar className="size-5 shrink-0">
                             <AvatarImage src={issue.assignee.avatarUrl ?? ''} />
@@ -215,10 +236,11 @@ export default function MyIssuesPage() {
                           </Avatar>
                         )}
                       </Link>
-                    ))}
-                  </div>
+                    )
+                  })}
                 </div>
-              ))}
+              </div>
+            ))}
           </div>
         )}
       </div>

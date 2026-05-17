@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Trash2, ExternalLink } from 'lucide-react'
+import { Loader2, Trash2, ExternalLink, MessageSquare } from 'lucide-react'
 import { trpc } from '@/lib/trpc/provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,7 @@ import { IssueStatusSelect } from './IssueStatusSelect'
 import { IssuePrioritySelect } from './IssuePrioritySelect'
 import { IssueAssigneeSelect } from './IssueAssigneeSelect'
 import { IssueDueDatePicker } from './IssueDueDatePicker'
+import { IssueLabelSelect } from './IssueLabelSelect'
 import { IssueIdentifier } from './IssueIdentifier'
 import { IssueSubIssues } from './IssueSubIssues'
 
@@ -42,6 +43,7 @@ export function IssueSlideOver({
     refetch,
   } = trpc.issue.getById.useQuery({ issueId }, { enabled: open })
   const { data: members } = trpc.member.list.useQuery({ workspaceId }, { enabled: open })
+  const { data: labelsData } = trpc.label.list.useQuery({ workspaceId }, { enabled: open })
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState<unknown>(null)
@@ -71,6 +73,22 @@ export function IssueSlideOver({
     onError: (err) => toast.error(err.message),
   })
 
+  const addLabelMutation = trpc.issue.addLabel.useMutation({
+    onSuccess: () => {
+      refetch()
+      utils.issue.list.invalidate()
+    },
+    onError: (err) => toast.error(err.message),
+  })
+
+  const removeLabelMutation = trpc.issue.removeLabel.useMutation({
+    onSuccess: () => {
+      refetch()
+      utils.issue.list.invalidate()
+    },
+    onError: (err) => toast.error(err.message),
+  })
+
   function handleFieldUpdate(field: string, value: unknown) {
     updateMutation.mutate({ issueId, [field]: value } as never)
   }
@@ -87,6 +105,15 @@ export function IssueSlideOver({
       updateMutation.mutate({ issueId, description } as never, {
         onSettled: () => setIsSaving(false),
       })
+    }
+  }
+
+  function handleLabelToggle(labelId: string) {
+    const currentIds = issue?.labels?.map((l) => l.labelId) ?? []
+    if (currentIds.includes(labelId)) {
+      removeLabelMutation.mutate({ issueId, labelId })
+    } else {
+      addLabelMutation.mutate({ issueId, labelId })
     }
   }
 
@@ -151,6 +178,24 @@ export function IssueSlideOver({
                       projectId={issue.projectId}
                       workspaceSlug={workspaceSlug}
                     />
+
+                    <Separator />
+
+                    {/* Activity feed placeholder — wired in Phase 13 */}
+                    <div>
+                      <div className="mb-2 flex items-center gap-2">
+                        <MessageSquare className="text-muted-foreground size-3.5" />
+                        <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
+                          Activity
+                        </span>
+                        {issue._count.comments > 0 && (
+                          <span className="text-muted-foreground text-xs">({issue._count.comments})</span>
+                        )}
+                      </div>
+                      <div className="border-border rounded-md border border-dashed p-4 text-center">
+                        <p className="text-muted-foreground text-xs">Comments coming in Phase 13</p>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="space-y-4">
@@ -196,6 +241,19 @@ export function IssueSlideOver({
                           size="sm"
                         />
                       </div>
+
+                      {/* Labels — editable */}
+                      <div>
+                        <label className="text-muted-foreground mb-1 block text-xs font-medium">
+                          Labels
+                        </label>
+                        <IssueLabelSelect
+                          selectedIds={issue.labels?.map((l) => l.labelId) ?? []}
+                          labels={labelsData ?? []}
+                          onToggle={handleLabelToggle}
+                          size="sm"
+                        />
+                      </div>
                     </div>
 
                     <Separator />
@@ -215,25 +273,8 @@ export function IssueSlideOver({
                         <div className="flex items-center gap-2 text-xs">
                           <span className="text-muted-foreground">Parent:</span>
                           <span>
-                            {issue.parent.identifier} - {issue.parent.title}
+                            {issue.parent.identifier} — {issue.parent.title}
                           </span>
-                        </div>
-                      )}
-                      {issue.labels?.length > 0 && (
-                        <div className="flex flex-wrap gap-1 pt-1">
-                          {issue.labels.map(({ label }) => (
-                            <span
-                              key={label.id}
-                              className="inline-block rounded-md border px-1.5 py-0.5 text-xs"
-                              style={{
-                                backgroundColor: label.color + '20',
-                                color: label.color,
-                                borderColor: label.color + '40',
-                              }}
-                            >
-                              {label.name}
-                            </span>
-                          ))}
                         </div>
                       )}
                     </div>

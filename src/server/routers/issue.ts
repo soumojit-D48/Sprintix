@@ -500,4 +500,72 @@ export const issueRouter = router({
         orderBy: { order: 'asc' },
       })
     }),
+
+  // Returns all issues assigned to the current user across an entire workspace
+  listForCurrentUser: protectedProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const member = await getMemberByClerkId(input.workspaceId, ctx.userId!)
+      if (!member) throw new TRPCError({ code: 'FORBIDDEN' })
+
+      const user = await prisma.user.findFirst({
+        where: { clerkId: ctx.userId! },
+        select: { id: true },
+      })
+      if (!user) throw new TRPCError({ code: 'UNAUTHORIZED' })
+
+      return prisma.issue.findMany({
+        where: {
+          project: { workspaceId: input.workspaceId },
+          assigneeId: user.id,
+          deletedAt: null,
+        },
+        include: {
+          assignee: { select: { id: true, name: true, avatarUrl: true } },
+          reporter: { select: { id: true, name: true, avatarUrl: true } },
+          labels: { include: { label: true } },
+          sprint: { select: { id: true, name: true, status: true } },
+          project: { select: { id: true, name: true, identifier: true, color: true } },
+          _count: { select: { comments: true, subIssues: { where: { deletedAt: null } } } },
+        },
+        orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
+      })
+    }),
+
+  // Returns all backlog issues (no sprint) for a project
+  listBacklog: protectedProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        search: z.string().optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { workspaceId } = await getProjectWorkspaceId(input.projectId)
+      const member = await getMemberByClerkId(workspaceId, ctx.userId!)
+      if (!member) throw new TRPCError({ code: 'FORBIDDEN' })
+
+      const where: Record<string, unknown> = {
+        projectId: input.projectId,
+        sprintId: null,
+        deletedAt: null,
+        parentId: null,
+      }
+
+      if (input.search) {
+        where.title = { contains: input.search, mode: 'insensitive' }
+      }
+
+      const issues = await prisma.issue.findMany({
+        where,
+        include: {
+          assignee: { select: { id: true, name: true, avatarUrl: true } },
+          labels: { include: { label: true } },
+          _count: { select: { comments: true, subIssues: { where: { deletedAt: null } } } },
+        },
+        orderBy: [{ status: 'asc' }, { priority: 'asc' }, { createdAt: 'desc' }],
+      })
+
+      return issues
+    }),
 })

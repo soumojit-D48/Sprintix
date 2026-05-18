@@ -7,6 +7,7 @@ import { trpc } from '@/lib/trpc/provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
@@ -48,6 +49,7 @@ export function IssueSlideOver({
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState<unknown>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   useEffect(() => {
     if (issue) {
@@ -119,7 +121,7 @@ export function IssueSlideOver({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-2xl">
+      <SheetContent className="w-full sm:max-w-3xl md:max-w-4xl">
         {isLoading ? (
           <div className="flex h-full items-center justify-center">
             <Loader2 className="size-6 animate-spin" />
@@ -138,7 +140,7 @@ export function IssueSlideOver({
                   <ExternalLink className="size-3.5" />
                 </button>
               </div>
-              <SheetTitle className="text-left">
+              <div className="text-left pt-2 pb-4">
                 <Input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -148,9 +150,9 @@ export function IssueSlideOver({
                       e.currentTarget.blur()
                     }
                   }}
-                  className="hover:border-border focus:border-border -ml-2 border-transparent text-lg font-semibold"
+                  className="hover:bg-muted focus:bg-transparent -ml-2 border-transparent text-2xl font-semibold font-sans shadow-none focus-visible:ring-1"
                 />
-              </SheetTitle>
+              </div>
             </SheetHeader>
 
             <ScrollArea className="flex-1">
@@ -282,19 +284,33 @@ export function IssueSlideOver({
                     <Separator />
 
                     <div>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => {
-                          if (confirm('Delete this issue?')) {
-                            deleteMutation.mutate({ issueId: issue.id })
-                          }
-                        }}
-                      >
-                        <Trash2 className="mr-1.5 size-3.5" />
-                        Delete Issue
-                      </Button>
+                      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="destructive" size="sm" className="w-full">
+                            <Trash2 className="mr-1.5 size-3.5" />
+                            Delete Issue
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Delete Issue</DialogTitle>
+                            <DialogDescription>
+                              Are you sure you want to delete this issue? This action cannot be undone.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <DialogFooter>
+                            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+                              Cancel
+                            </Button>
+                            <Button variant="destructive" onClick={() => {
+                              deleteMutation.mutate({ issueId: issue.id })
+                              setDeleteOpen(false)
+                            }}>
+                              Delete
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
                     </div>
                   </div>
                 </div>

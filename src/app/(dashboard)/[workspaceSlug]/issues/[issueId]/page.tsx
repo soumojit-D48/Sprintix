@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, Trash2, Tag, MessageSquare } from 'lucide-react'
 import { trpc } from '@/lib/trpc/provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
@@ -40,6 +41,7 @@ export default function IssueDetailPage() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState<unknown>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   useEffect(() => {
     if (issue) {
@@ -152,15 +154,17 @@ export default function IssueDetailPage() {
             {/* ─── Main column ─── */}
             <div className="space-y-6 min-w-0">
               {/* Editable title */}
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={handleTitleSave}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.currentTarget.blur()
-                }}
-                className="hover:border-border focus:border-border -ml-2 border-transparent text-xl font-semibold"
-              />
+              <div className="pt-2 pb-4">
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  onBlur={handleTitleSave}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur()
+                  }}
+                  className="hover:bg-muted focus:bg-transparent -ml-2 border-transparent text-2xl font-semibold font-sans shadow-none focus-visible:ring-1"
+                />
+              </div>
 
               {/* Description */}
               <div>
@@ -292,20 +296,33 @@ export default function IssueDetailPage() {
               <Separator />
 
               {/* Danger zone */}
-              <Button
-                variant="destructive"
-                size="sm"
-                className="w-full"
-                disabled={deleteMutation.isPending}
-                onClick={() => {
-                  if (confirm(`Delete issue ${issue.identifier}? This cannot be undone.`)) {
-                    deleteMutation.mutate({ issueId: issue.id })
-                  }
-                }}
-              >
-                <Trash2 className="mr-1.5 size-3.5" />
-                Delete Issue
-              </Button>
+              <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="destructive" size="sm" className="w-full">
+                    <Trash2 className="mr-1.5 size-3.5" />
+                    Delete Issue
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Delete Issue</DialogTitle>
+                    <DialogDescription>
+                      Are you sure you want to delete {issue.identifier}? This action cannot be undone.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button variant="destructive" onClick={() => {
+                      deleteMutation.mutate({ issueId: issue.id })
+                      setDeleteOpen(false)
+                    }}>
+                      Delete
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </div>

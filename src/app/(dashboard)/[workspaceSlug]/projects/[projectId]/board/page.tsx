@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { IssueIdentifier } from '@/components/issues/IssueIdentifier'
 import { IssueCreateModal } from '@/components/issues/IssueCreateModal'
 import { IssueSlideOver } from '@/components/issues/IssueSlideOver'
+import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { cn } from '@/lib/utils'
 
 const COLUMNS = [
@@ -58,9 +59,27 @@ export default function BoardPage() {
       .sort((a, b) => (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99)),
   }))
 
+  const utils = trpc.useUtils()
+  const reorderMutation = trpc.issue.reorder.useMutation({
+    onSuccess: () => {
+      utils.issue.list.invalidate()
+    },
+    onError: () => {
+      issueQuery.refetch()
+    },
+  })
+
   function handleCreateIssue(status: string) {
     setCreateStatus(status)
     setCreateOpen(true)
+  }
+
+  const handleDragEnd = async (issueId: string, newStatus: string, newOrder: number) => {
+    reorderMutation.mutate({
+      issueId,
+      status: newStatus as 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE' | 'CANCELLED',
+      order: newOrder,
+    })
   }
 
   return (
@@ -87,96 +106,12 @@ export default function BoardPage() {
           ))}
         </div>
       ) : (
-        <div className="flex h-full gap-4 overflow-x-auto p-6">
-          {groupedIssues.map((column) => (
-            <div key={column.key} className="flex w-72 shrink-0 flex-col">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className={cn('size-2 rounded-full', column.color)} />
-                  <span className="text-sm font-semibold">{column.label}</span>
-                  <span className="text-muted-foreground text-xs">{column.issues.length}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleCreateIssue(column.key)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <Plus className="size-3.5" />
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-2 overflow-y-auto">
-                {column.issues.map((issue) => (
-                  <button
-                    key={issue.id}
-                    type="button"
-                    onClick={() => setSlideOverIssueId(issue.id)}
-                    className="bg-card hover:bg-accent/50 group flex flex-col gap-2 rounded-lg border p-3 text-left shadow-sm transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <IssueIdentifier identifier={issue.identifier} />
-                      {issue.priority !== 'NO_PRIORITY' && (
-                        <span
-                          className={cn(
-                            'shrink-0 text-[10px] font-medium',
-                            issue.priority === 'URGENT' && 'text-red-500',
-                            issue.priority === 'HIGH' && 'text-orange-500',
-                            issue.priority === 'MEDIUM' && 'text-yellow-500',
-                            issue.priority === 'LOW' && 'text-blue-500'
-                          )}
-                        >
-                          {issue.priority}
-                        </span>
-                      )}
-                    </div>
-                    <p className="line-clamp-2 text-sm leading-snug">{issue.title}</p>
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-wrap gap-1">
-                        {issue.labels?.slice(0, 2).map(({ label }) => (
-                          <span
-                            key={label.id}
-                            className="inline-block rounded px-1 text-[10px]"
-                            style={{
-                              backgroundColor: label.color + '20',
-                              color: label.color,
-                            }}
-                          >
-                            {label.name}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {issue.dueDate && (
-                          <span
-                            className={cn(
-                              'text-[10px]',
-                              new Date(issue.dueDate) < new Date()
-                                ? 'text-destructive font-medium'
-                                : 'text-muted-foreground'
-                            )}
-                          >
-                            {new Date(issue.dueDate).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </span>
-                        )}
-                        {issue.assignee && (
-                          <Avatar className="size-5">
-                            <AvatarImage src={issue.assignee.avatarUrl ?? ''} />
-                            <AvatarFallback className="text-[9px]">
-                              {issue.assignee.name?.charAt(0) ?? 'U'}
-                            </AvatarFallback>
-                          </Avatar>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <KanbanBoard
+          columns={groupedIssues}
+          onIssueClick={setSlideOverIssueId}
+          onCreateIssue={handleCreateIssue}
+          onDragEnd={handleDragEnd}
+        />
       )}
 
       {project && workspace && (

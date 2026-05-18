@@ -7,7 +7,7 @@ import { trpc } from '@/lib/trpc/provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { IssueStatusSelect } from './IssueStatusSelect'
 import { IssuePrioritySelect } from './IssuePrioritySelect'
@@ -99,6 +99,7 @@ export function IssueCreateModal({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Create Issue</DialogTitle>
+          <DialogDescription className="sr-only">Fill out the form below to create a new issue.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">

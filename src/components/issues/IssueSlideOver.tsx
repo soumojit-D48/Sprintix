@@ -6,7 +6,7 @@ import { Loader2, Trash2, ExternalLink, MessageSquare } from 'lucide-react'
 import { trpc } from '@/lib/trpc/provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -122,6 +122,9 @@ export function IssueSlideOver({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-3xl md:max-w-4xl">
+        <SheetTitle className="sr-only">Issue details</SheetTitle>
+        <SheetDescription className="sr-only">View and edit details, description, and settings for this issue.</SheetDescription>
+        
         {isLoading ? (
           <div className="flex h-full items-center justify-center">
             <Loader2 className="size-6 animate-spin" />

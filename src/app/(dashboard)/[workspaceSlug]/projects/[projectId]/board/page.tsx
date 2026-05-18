@@ -63,6 +63,7 @@ export default function BoardPage() {
   const reorderMutation = trpc.issue.reorder.useMutation({
     onSuccess: () => {
       utils.issue.list.invalidate()
+      utils.issue.getById.invalidate()
     },
     onError: () => {
       issueQuery.refetch()

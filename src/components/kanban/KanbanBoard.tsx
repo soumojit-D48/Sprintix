@@ -156,7 +156,6 @@ export function KanbanBoard({ columns: initialColumns, onIssueClick, onCreateIss
     const activeId = active.id
     const overId = over.id
 
-    if (activeId === overId) return
     
     setColumns((cols) => {
       const activeColIndex = cols.findIndex((col) => col.issues.some((i) => i.id === activeId))
@@ -175,12 +174,19 @@ export function KanbanBoard({ columns: initialColumns, onIssueClick, onCreateIss
 
       if (activeColIndex === overColIndex) {
         const oldIndex = activeCol.issues.findIndex((i) => i.id === activeId)
-        const newIndex = overCol.issues.findIndex((i) => i.id === overId)
+        let newIndex = overCol.issues.findIndex((i) => i.id === overId)
+        
+        // If dropped on the column itself, move to the end
+        if (newIndex === -1) {
+          newIndex = activeCol.issues.length - 1
+        }
         
         const newIssues = arrayMove(activeCol.issues, oldIndex, newIndex)
         
         let newOrder: number = Date.now()
-        if (newIndex === 0) {
+        if (newIssues.length === 1) {
+          newOrder = Date.now()
+        } else if (newIndex === 0) {
           newOrder = (newIssues[1]?.order ?? Date.now()) - 1000
         } else if (newIndex === newIssues.length - 1) {
           const prevIssue = newIssues[newIndex - 1]
@@ -205,8 +211,6 @@ export function KanbanBoard({ columns: initialColumns, onIssueClick, onCreateIss
         
         return newCols
       } else {
-        // Handle cross-column drop in end event too if over didn't catch it
-        // Or just let over handle it, but we need to trigger API call
         const activeIssueIndex = activeCol.issues.findIndex((i) => i.id === activeId)
         const movedIssue = activeCol.issues[activeIssueIndex]
         if (movedIssue) {

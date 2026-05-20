@@ -4,66 +4,26 @@ import { useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import {
   CalendarRange,
-  Circle,
-  ChevronLeft,
-  ChevronRight,
   Plus,
-  AlertCircle,
-  Clock,
 } from 'lucide-react'
 import { trpc } from '@/lib/trpc/provider'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { IssueIdentifier } from '@/components/issues/IssueIdentifier'
 import { IssueCreateModal } from '@/components/issues/IssueCreateModal'
 import { IssueSlideOver } from '@/components/issues/IssueSlideOver'
 import { cn } from '@/lib/utils'
+import { differenceInDays, startOfWeek, addDays, format, startOfMonth, addMonths, endOfMonth, isSameDay } from 'date-fns'
 
 const STATUS_COLORS: Record<string, string> = {
-  BACKLOG: 'text-gray-400',
-  TODO: 'text-blue-500',
-  IN_PROGRESS: 'text-yellow-500',
-  IN_REVIEW: 'text-purple-500',
-  DONE: 'text-green-500',
-  CANCELLED: 'text-red-400',
+  BACKLOG: 'bg-gray-400',
+  TODO: 'bg-blue-500',
+  IN_PROGRESS: 'bg-yellow-500',
+  IN_REVIEW: 'bg-purple-500',
+  DONE: 'bg-green-500',
+  CANCELLED: 'bg-red-400',
 }
 
-const PRIORITY_COLORS: Record<string, string> = {
-  URGENT: 'text-red-500',
-  HIGH: 'text-orange-500',
-  MEDIUM: 'text-yellow-500',
-  LOW: 'text-blue-500',
-  NO_PRIORITY: 'text-muted-foreground',
-}
-
-type ZoomLevel = 'week' | 'month' | 'quarter'
-
-function getDateGroupLabel(date: Date, zoom: ZoomLevel): string {
-  if (zoom === 'week') {
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-  }
-  if (zoom === 'month') {
-    const weekStart = new Date(date)
-    weekStart.setDate(date.getDate() - date.getDay())
-    const weekEnd = new Date(weekStart)
-    weekEnd.setDate(weekStart.getDate() + 6)
-    return `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-  }
-  // quarter → group by month
-  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-}
-
-function getGroupKey(date: Date, zoom: ZoomLevel): string {
-  if (zoom === 'week') return date.toDateString()
-  if (zoom === 'month') {
-    const weekStart = new Date(date)
-    weekStart.setDate(date.getDate() - date.getDay())
-    return weekStart.toISOString().split('T')[0] ?? ''
-  }
-  return `${date.getFullYear()}-${date.getMonth()}`
-}
+type ZoomLevel = 'week' | 'month'
 
 export default function TimelinePage() {
   const params = useParams()
@@ -77,64 +37,65 @@ export default function TimelinePage() {
   const { data: project } = trpc.project.getById.useQuery({ projectId })
   const { data: issueData, isLoading } = trpc.issue.list.useQuery({
     projectId,
-    limit: 500,
+    limit: 200,
     sortBy: 'dueDate',
     sortOrder: 'asc',
   })
 
   const issues = issueData?.issues ?? []
+  
+  // Calculate timeline bounds
   const now = new Date()
-  const todayStr = now.toDateString()
+  
+  const timelineBounds = useMemo(() => {
+    let minDate = new Date()
+    let maxDate = new Date()
+    maxDate.setDate(maxDate.getDate() + 30) // Default +30 days
+    minDate.setDate(minDate.getDate() - 7) // Default -7 days
 
-  // Split into scheduled (has due date) and unscheduled
-  const scheduled = issues.filter((i) => !!i.dueDate && !['DONE', 'CANCELLED'].includes(i.status))
-  const unscheduled = issues.filter((i) => !i.dueDate && !['DONE', 'CANCELLED'].includes(i.status))
-  const done = issues.filter((i) => ['DONE', 'CANCELLED'].includes(i.status))
-
-  // Group scheduled issues by date bucket
-  const grouped = useMemo(() => {
-    const map = new Map<string, { label: string; date: Date; issues: typeof scheduled }>()
-    for (const issue of scheduled) {
-      const d = new Date(issue.dueDate!)
-      const key = getGroupKey(d, zoom)
-      if (!map.has(key)) {
-        map.set(key, { label: getDateGroupLabel(d, zoom), date: d, issues: [] })
+    issues.forEach((issue) => {
+      // Use createdAt as start date for simplicity in this demo
+      const start = new Date((issue as any).createdAt || new Date())
+      if (start < minDate) minDate = start
+      if (issue.dueDate) {
+        const end = new Date(issue.dueDate)
+        if (end > maxDate) maxDate = end
       }
-      map.get(key)!.issues.push(issue)
-    }
-    // Sort by date
-    return Array.from(map.values()).sort((a, b) => a.date.getTime() - b.date.getTime())
-  }, [scheduled, zoom])
+    })
 
-  const overdue = scheduled.filter((i) => new Date(i.dueDate!) < now)
-  const upcoming = scheduled.filter((i) => new Date(i.dueDate!) >= now)
+    // Pad the bounds slightly
+    const start = startOfWeek(minDate)
+    const end = addDays(maxDate, 14)
+    
+    return { start, end }
+  }, [issues])
+
+  // Generate date columns
+  const dateColumns = useMemo(() => {
+    const cols = []
+    let current = timelineBounds.start
+    while (current <= timelineBounds.end) {
+      cols.push(current)
+      current = addDays(current, 1)
+    }
+    return cols
+  }, [timelineBounds])
+
+  const totalDays = dateColumns.length
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col overflow-hidden bg-background">
       {/* Toolbar */}
-      <div className="flex items-center justify-between border-b px-6 py-3">
+      <div className="flex items-center justify-between border-b px-6 py-3 shrink-0">
         <div className="flex items-center gap-3">
           <CalendarRange className="text-muted-foreground size-4" />
           <span className="text-sm font-medium">Timeline</span>
-          <div className="flex items-center gap-1">
-            {overdue.length > 0 && (
-              <Badge variant="destructive" className="text-xs">
-                {overdue.length} overdue
-              </Badge>
-            )}
-            <Badge variant="secondary" className="text-xs">
-              {upcoming.length} upcoming
-            </Badge>
-            <Badge variant="outline" className="text-xs">
-              {unscheduled.length} unscheduled
-            </Badge>
-          </div>
         </div>
 
         <div className="flex items-center gap-2">
           {/* Zoom controls */}
           <div className="flex overflow-hidden rounded-md border">
-            {(['week', 'month', 'quarter'] as ZoomLevel[]).map((z) => (
+            {(['week', 'month'] as ZoomLevel[]).map((z) => (
               <button
                 key={z}
                 type="button"
@@ -157,115 +118,149 @@ export default function TimelinePage() {
         </div>
       </div>
 
-      {/* Content */}
+      {/* Gantt Chart Area */}
       {isLoading ? (
         <div className="space-y-4 p-6">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i}>
-              <Skeleton className="mb-2 h-5 w-48" />
-              <div className="space-y-1.5">
-                {Array.from({ length: 3 }).map((_, j) => (
-                  <Skeleton key={j} className="h-11 w-full rounded-lg" />
+          <Skeleton className="mb-2 h-10 w-full" />
+          {Array.from({ length: 10 }).map((_, i) => (
+            <Skeleton key={i} className="h-8 w-full rounded-md" />
+          ))}
+        </div>
+      ) : issues.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="text-center">
+            <p className="text-muted-foreground text-sm">No issues yet</p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-1 overflow-hidden relative">
+          
+          {/* Left Fixed Column: Issue Titles */}
+          <div className="w-64 border-r shrink-0 flex flex-col bg-background z-20 shadow-[1px_0_5px_-2px_rgba(0,0,0,0.1)] relative">
+            <div className="h-12 border-b flex items-center px-4 font-medium text-xs text-muted-foreground bg-muted/30">
+              Issue
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <div className="pt-2 pb-10">
+                {issues.map(issue => (
+                  <div 
+                    key={issue.id} 
+                    className="h-10 px-4 flex items-center border-b border-transparent hover:bg-muted/50 cursor-pointer group"
+                    onClick={() => setSlideOverIssueId(issue.id)}
+                  >
+                    <span className="text-xs truncate" title={issue.title}>{issue.title}</span>
+                  </div>
                 ))}
               </div>
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="flex-1 overflow-auto">
-          <div className="mx-auto max-w-4xl px-6 py-6 space-y-8">
+          </div>
 
-            {/* Overdue section */}
-            {overdue.length > 0 && (
-              <Section
-                icon={<AlertCircle className="size-4 text-destructive" />}
-                title="Overdue"
-                titleClass="text-destructive"
-                count={overdue.length}
-              >
-                {overdue.map((issue) => (
-                  <IssueRow
-                    key={issue.id}
-                    issue={issue}
-                    now={now}
-                    todayStr={todayStr}
-                    onClick={() => setSlideOverIssueId(issue.id)}
-                  />
-                ))}
-              </Section>
-            )}
+          {/* Right Scrollable Column: Timeline Grid */}
+          <div className="flex-1 overflow-auto relative custom-scrollbar">
+            {/* Header: Months/Weeks */}
+            <div className="sticky top-0 z-10 bg-background border-b flex h-12 shadow-sm">
+              {dateColumns.map((date, i) => {
+                // Show label only if it's the start of week or month based on zoom
+                let showLabel = false
+                let label = ''
+                
+                if (zoom === 'month') {
+                  if (date.getDate() === 1 || i === 0) {
+                    showLabel = true
+                    label = format(date, 'MMM d')
+                  }
+                } else if (zoom === 'week') {
+                  if (date.getDay() === 1 || i === 0) {
+                    showLabel = true
+                    label = format(date, 'MMM d')
+                  }
+                }
 
-            {/* Date-grouped upcoming issues */}
-            {grouped.length > 0 ? (
-              grouped.map((group) => (
-                <Section
-                  key={group.label}
-                  icon={<CalendarRange className="text-muted-foreground size-4" />}
-                  title={group.label}
-                  count={group.issues.length}
-                >
-                  {group.issues.map((issue) => (
-                    <IssueRow
-                      key={issue.id}
-                      issue={issue}
-                      now={now}
-                      todayStr={todayStr}
-                      onClick={() => setSlideOverIssueId(issue.id)}
+                // Adjust column width based on zoom
+                const colWidth = zoom === 'week' ? 40 : 20
+
+                return (
+                  <div 
+                    key={i} 
+                    className="shrink-0 border-r border-border/50 relative flex flex-col justify-end pb-1"
+                    style={{ width: colWidth }}
+                  >
+                    {showLabel && (
+                      <span className="absolute -top-1 left-1 text-[10px] text-muted-foreground font-medium whitespace-nowrap">
+                        {label}
+                      </span>
+                    )}
+                    {/* Day number for week view */}
+                    {zoom === 'week' && (
+                      <span className="text-[9px] text-muted-foreground/70 text-center w-full">
+                        {format(date, 'EE').charAt(0)}
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Grid Area */}
+            <div className="relative pt-2 pb-10" style={{ width: dateColumns.length * (zoom === 'week' ? 40 : 20) }}>
+              
+              {/* Vertical Grid Lines & Today Line */}
+              <div className="absolute inset-0 flex pointer-events-none">
+                {dateColumns.map((date, i) => {
+                  const isToday = isSameDay(date, now)
+                  const colWidth = zoom === 'week' ? 40 : 20
+                  return (
+                    <div 
+                      key={i} 
+                      className={cn(
+                        "shrink-0 h-full border-r border-border/30",
+                        isToday && "border-r-red-500 bg-red-500/5 z-0"
+                      )}
+                      style={{ width: colWidth }}
                     />
-                  ))}
-                </Section>
-              ))
-            ) : overdue.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <CalendarRange className="text-muted-foreground/30 mb-4 size-14" />
-                <h3 className="text-base font-semibold">No scheduled issues</h3>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  Issues with due dates will appear here on a timeline.
-                </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() => setCreateOpen(true)}
-                >
-                  <Plus className="mr-1.5 size-4" />
-                  Create Issue with Due Date
-                </Button>
+                  )
+                })}
               </div>
-            ) : null}
 
-            {/* Unscheduled section */}
-            {unscheduled.length > 0 && (
-              <Section
-                icon={<Clock className="text-muted-foreground size-4" />}
-                title="Unscheduled"
-                subtitle="No due date set"
-                count={unscheduled.length}
-              >
-                {unscheduled.map((issue) => (
-                  <IssueRow
-                    key={issue.id}
-                    issue={issue}
-                    now={now}
-                    todayStr={todayStr}
-                    onClick={() => setSlideOverIssueId(issue.id)}
-                  />
-                ))}
-              </Section>
-            )}
+              {/* Bars */}
+              <div className="relative z-10">
+                {issues.map(issue => {
+                  const start = new Date((issue as any).createdAt || new Date())
+                  const end = issue.dueDate ? new Date(issue.dueDate) : addDays(start, 2) // default 2 days if no due date
+                  
+                  // Calculate left offset and width
+                  const daysFromStart = differenceInDays(start, timelineBounds.start)
+                  const duration = Math.max(1, differenceInDays(end, start))
+                  
+                  const colWidth = zoom === 'week' ? 40 : 20
+                  const left = daysFromStart * colWidth
+                  const width = duration * colWidth
 
-            {/* Done section (collapsed summary) */}
-            {done.length > 0 && (
-              <div className="border-border rounded-lg border px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Circle className="size-2.5 fill-current text-green-500" />
-                  <span className="text-muted-foreground text-sm">
-                    {done.filter((i) => i.status === 'DONE').length} done ·{' '}
-                    {done.filter((i) => i.status === 'CANCELLED').length} cancelled
-                  </span>
-                </div>
+                  const colorClass = STATUS_COLORS[issue.status] || 'bg-gray-400'
+
+                  return (
+                    <div 
+                      key={issue.id} 
+                      className="h-10 relative flex items-center group cursor-pointer"
+                      onClick={() => setSlideOverIssueId(issue.id)}
+                    >
+                      {/* Interactive Bar */}
+                      <div 
+                        className={cn(
+                          "absolute h-6 rounded-full opacity-80 hover:opacity-100 transition-opacity shadow-sm flex items-center px-2",
+                          colorClass
+                        )}
+                        style={{ left: `${Math.max(0, left)}px`, width: `${width}px`, minWidth: '8px' }}
+                      >
+                        <span className="text-[10px] text-white font-medium truncate drop-shadow-sm">
+                          {issue.identifier}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}
@@ -290,135 +285,6 @@ export default function TimelinePage() {
             workspaceSlug={workspaceSlug}
           />
         </>
-      )}
-    </div>
-  )
-}
-
-// ─── Sub-components ──────────────────────────────────────────────────────────
-
-function Section({
-  icon,
-  title,
-  titleClass,
-  subtitle,
-  count,
-  children,
-}: {
-  icon: React.ReactNode
-  title: string
-  titleClass?: string
-  subtitle?: string
-  count: number
-  children: React.ReactNode
-}) {
-  return (
-    <div>
-      <div className="mb-3 flex items-center gap-2">
-        {icon}
-        <h3 className={cn('text-sm font-semibold', titleClass)}>{title}</h3>
-        {subtitle && <span className="text-muted-foreground text-xs">· {subtitle}</span>}
-        <span className="text-muted-foreground text-xs">{count}</span>
-      </div>
-      <div className="divide-y rounded-lg border">
-        {children}
-      </div>
-    </div>
-  )
-}
-
-function IssueRow({
-  issue,
-  now,
-  todayStr,
-  onClick,
-}: {
-  issue: {
-    id: string
-    identifier: string
-    title: string
-    status: string
-    priority: string
-    dueDate?: Date | string | null
-    assignee?: { name: string; avatarUrl: string | null } | null
-    labels?: { label: { id: string; name: string; color: string } }[]
-  }
-  now: Date
-  todayStr: string
-  onClick: () => void
-}) {
-  const isOverdue = !!issue.dueDate && new Date(issue.dueDate) < now
-  const isDueToday = !!issue.dueDate && new Date(issue.dueDate).toDateString() === todayStr
-
-  return (
-    <div
-      className="hover:bg-muted/40 flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors first:rounded-t-lg last:rounded-b-lg"
-      onClick={onClick}
-    >
-      {/* Status */}
-      <Circle
-        className={cn('size-2.5 shrink-0 fill-current', STATUS_COLORS[issue.status] ?? 'text-gray-400')}
-      />
-
-      {/* Priority */}
-      {issue.priority !== 'NO_PRIORITY' && (
-        <span
-          className={cn('shrink-0 text-xs font-medium', PRIORITY_COLORS[issue.priority] ?? '')}
-        >
-          {issue.priority.charAt(0)}
-        </span>
-      )}
-
-      {/* Identifier */}
-      <IssueIdentifier identifier={issue.identifier} />
-
-      {/* Title */}
-      <span className="flex-1 truncate text-sm">{issue.title}</span>
-
-      {/* Labels */}
-      {issue.labels && issue.labels.length > 0 && (
-        <div className="hidden shrink-0 gap-1 lg:flex">
-          {issue.labels.slice(0, 2).map(({ label }) => (
-            <Badge
-              key={label.id}
-              variant="outline"
-              className="text-[10px]"
-              style={{
-                backgroundColor: label.color + '20',
-                color: label.color,
-                borderColor: label.color + '40',
-              }}
-            >
-              {label.name}
-            </Badge>
-          ))}
-        </div>
-      )}
-
-      {/* Due date */}
-      {issue.dueDate && (
-        <span
-          className={cn(
-            'shrink-0 text-xs font-medium',
-            isOverdue ? 'text-destructive' : isDueToday ? 'text-orange-500' : 'text-muted-foreground'
-          )}
-        >
-          {isOverdue ? '⚠ ' : isDueToday ? '⏰ ' : ''}
-          {new Date(issue.dueDate).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-          })}
-        </span>
-      )}
-
-      {/* Assignee */}
-      {issue.assignee ? (
-        <Avatar className="size-5 shrink-0">
-          <AvatarImage src={issue.assignee.avatarUrl ?? ''} />
-          <AvatarFallback className="text-[9px]">{issue.assignee.name?.charAt(0) ?? 'U'}</AvatarFallback>
-        </Avatar>
-      ) : (
-        <div className="bg-muted size-5 shrink-0 rounded-full" />
       )}
     </div>
   )

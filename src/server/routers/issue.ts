@@ -3,6 +3,7 @@ import { router, protectedProcedure } from '../trpc'
 import { prisma } from '@/lib/prisma'
 import { TRPCError } from '@trpc/server'
 import { triggerEvent } from '@/lib/pusher'
+import { createActivityLog } from '@/lib/activity-log'
 import {
   createIssueSchema,
   updateIssueSchema,
@@ -27,18 +28,6 @@ async function getProjectWorkspaceId(projectId: string) {
   })
   if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Project not found' })
   return project
-}
-
-async function createActivityLog(
-  entityId: string,
-  entityType: string,
-  action: string,
-  metadata: unknown,
-  userId: string
-) {
-  return prisma.activityLog.create({
-    data: { entityId, entityType, action, metadata: metadata as object, userId },
-  })
 }
 
 export const issueRouter = router({
@@ -79,7 +68,7 @@ export const issueRouter = router({
       },
     })
 
-    await createActivityLog(issue.id, 'issue', 'created', { title: input.title }, member.userId)
+    await createActivityLog(prisma, issue.id, 'issue', 'created', { title: input.title }, member.userId)
 
     await triggerEvent(`private-workspace-${workspaceId}`, 'issue:created', { issueId: issue.id, projectId: issue.projectId })
 
@@ -144,6 +133,7 @@ export const issueRouter = router({
 
     for (const [field, change] of Object.entries(changes)) {
       await createActivityLog(
+        prisma,
         input.issueId,
         'issue',
         `${field}_changed`,
@@ -278,6 +268,7 @@ export const issueRouter = router({
     })
 
     await createActivityLog(
+      prisma,
       input.issueId,
       'issue',
       'status_changed',
@@ -312,6 +303,7 @@ export const issueRouter = router({
       })
 
       await createActivityLog(
+        prisma,
         input.issueId,
         'issue',
         'priority_changed',
@@ -344,6 +336,7 @@ export const issueRouter = router({
     })
 
     await createActivityLog(
+      prisma,
       input.issueId,
       'issue',
       'assigned',
@@ -496,6 +489,7 @@ export const issueRouter = router({
       })
 
       await createActivityLog(
+        prisma,
         subIssue.id,
         'issue',
         'created',

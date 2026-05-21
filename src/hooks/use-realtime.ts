@@ -1,0 +1,52 @@
+import { useEffect } from 'react'
+import { getPusherClient } from '@/lib/pusher-client'
+import { trpc } from '@/lib/trpc/provider'
+import { toast } from 'sonner'
+
+export function useRealtime(workspaceId?: string) {
+  const utils = trpc.useUtils()
+
+  useEffect(() => {
+    if (!workspaceId) return
+
+    const pusher = getPusherClient()
+    if (!pusher) return
+
+    const channelName = `private-workspace-${workspaceId}`
+    const channel = pusher.subscribe(channelName)
+
+    // Listen for issue updates
+    channel.bind('issue:updated', (data: { issueId: string; projectId: string }) => {
+      // Invalidate specific issue
+      utils.issue.getById.invalidate({ issueId: data.issueId })
+      // Invalidate project issue lists
+      utils.issue.list.invalidate({ projectId: data.projectId })
+      utils.issue.listBacklog.invalidate({ projectId: data.projectId })
+      // Invalidate user's personal issues
+      utils.issue.listForCurrentUser.invalidate({ workspaceId })
+    })
+
+    channel.bind('issue:created', (data: { issueId: string; projectId: string }) => {
+      utils.issue.list.invalidate({ projectId: data.projectId })
+      utils.issue.listBacklog.invalidate({ projectId: data.projectId })
+      utils.project.getById.invalidate({ projectId: data.projectId })
+    })
+
+    channel.bind('issue:deleted', (data: { issueId: string; projectId: string }) => {
+      utils.issue.list.invalidate({ projectId: data.projectId })
+      utils.issue.listBacklog.invalidate({ projectId: data.projectId })
+      utils.issue.listForCurrentUser.invalidate({ workspaceId })
+      utils.project.getById.invalidate({ projectId: data.projectId })
+    })
+
+    // Listen for comment updates (for later phases)
+    channel.bind('comment:created', (data: { issueId: string }) => {
+      utils.issue.getById.invalidate({ issueId: data.issueId })
+    })
+
+    return () => {
+      channel.unbind_all()
+      pusher.unsubscribe(channelName)
+    }
+  }, [workspaceId, utils])
+}

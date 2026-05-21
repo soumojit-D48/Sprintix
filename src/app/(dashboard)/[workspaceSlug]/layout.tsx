@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/layout/Sidebar/Sidebar'
 import { Topbar } from '@/components/layout/Topbar/Topbar'
 import { CommandPalette } from '@/components/layout/CommandPalette'
 import { prisma } from '@/lib/prisma'
+import { RealtimeProvider } from '@/components/layout/RealtimeProvider'
 
 export default async function DashboardLayout({
   children,
@@ -95,6 +96,7 @@ export default async function DashboardLayout({
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
       <CommandPalette projects={projects} workspaceSlug={workspaceSlug} />
+      <RealtimeProvider workspaceId={currentWorkspace.id} />
     </div>
   )
 }

@@ -36,10 +36,15 @@ export function usePresence(workspaceId?: string) {
     const channelName = `presence-workspace-${workspaceId}`
     const channel = pusher.subscribe(channelName)
 
+    channel.bind('pusher:subscription_error', (err: { status?: number }) => {
+      if (err.status === 403) {
+        console.warn('[Presence] Access denied to presence channel')
+      }
+    })
+
     channel.bind('pusher:subscription_succeeded', (members: any) => {
       const ids = new Set<string>()
-      // members.each is a pusher-js construct for presence channels
-      members.each((member: any) => {
+      Object.values(members.members).forEach((member: any) => {
         ids.add(member.id)
       })
       setOnlineUserIds(ids)

@@ -15,6 +15,16 @@ export function useRealtime(workspaceId?: string) {
     const channelName = `private-workspace-${workspaceId}`
     const channel = pusher.subscribe(channelName)
 
+    channel.bind('pusher:subscription_error', (err: { status?: number; error?: string }) => {
+      if (err.status === 403) {
+        toast.error('Real-time access denied')
+      }
+    })
+
+    channel.bind('pusher:subscription_succeeded', () => {
+      console.log(`[Realtime] Subscribed to ${channelName}`)
+    })
+
     // Listen for issue updates
     channel.bind('issue:updated', (data: { issueId: string; projectId: string }) => {
       // Invalidate specific issue

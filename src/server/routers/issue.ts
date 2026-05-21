@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { router, protectedProcedure } from '../trpc'
 import { prisma } from '@/lib/prisma'
 import { TRPCError } from '@trpc/server'
+import { triggerEvent } from '@/lib/pusher'
 import {
   createIssueSchema,
   updateIssueSchema,
@@ -80,6 +81,8 @@ export const issueRouter = router({
 
     await createActivityLog(issue.id, 'issue', 'created', { title: input.title }, member.userId)
 
+    await triggerEvent(`private-workspace-${workspaceId}`, 'issue:created', { issueId: issue.id, projectId: issue.projectId })
+
     return issue
   }),
 
@@ -149,6 +152,8 @@ export const issueRouter = router({
       )
     }
 
+    await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:updated', { issueId: issue.id, projectId: issue.projectId })
+
     return issue
   }),
 
@@ -168,6 +173,8 @@ export const issueRouter = router({
         where: { id: input.issueId },
         data: { deletedAt: new Date() },
       })
+
+      await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:deleted', { issueId: input.issueId, projectId: existing.projectId })
 
       return { success: true }
     }),
@@ -278,6 +285,8 @@ export const issueRouter = router({
       member.userId
     )
 
+    await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:updated', { issueId: issue.id, projectId: issue.projectId })
+
     return issue
   }),
 
@@ -310,6 +319,8 @@ export const issueRouter = router({
         member.userId
       )
 
+      await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:updated', { issueId: issue.id, projectId: issue.projectId })
+
       return issue
     }),
 
@@ -340,6 +351,8 @@ export const issueRouter = router({
       member.userId
     )
 
+    await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:updated', { issueId: issue.id, projectId: issue.projectId })
+
     return issue
   }),
 
@@ -353,10 +366,14 @@ export const issueRouter = router({
     const member = await getMemberByClerkId(existing.project.workspaceId, ctx.userId!)
     if (!member) throw new TRPCError({ code: 'FORBIDDEN' })
 
-    return prisma.issue.update({
+    const updated = await prisma.issue.update({
       where: { id: input.issueId },
       data: { order: input.order, status: input.status },
     })
+
+    await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:updated', { issueId: input.issueId, projectId: existing.projectId })
+
+    return updated
   }),
 
   bulkUpdate: protectedProcedure.input(bulkUpdateSchema).mutation(async ({ ctx, input }) => {
@@ -386,6 +403,11 @@ export const issueRouter = router({
       data,
     })
 
+    // Emit event for all issues updated
+    for (const id of input.issueIds) {
+      await triggerEvent(`private-workspace-${workspaceId}`, 'issue:updated', { issueId: id, projectId: firstIssue.projectId })
+    }
+
     return { success: true, count: input.issueIds.length }
   }),
 
@@ -406,10 +428,14 @@ export const issueRouter = router({
       })
       if (existing) return existing
 
-      return prisma.issueLabel.create({
+      const created = await prisma.issueLabel.create({
         data: { issueId: input.issueId, labelId: input.labelId },
         include: { label: true },
       })
+      
+      await triggerEvent(`private-workspace-${issue.project.workspaceId}`, 'issue:updated', { issueId: issue.id, projectId: issue.projectId })
+      
+      return created
     }),
 
   removeLabel: protectedProcedure
@@ -427,6 +453,8 @@ export const issueRouter = router({
       await prisma.issueLabel.delete({
         where: { issueId_labelId: { issueId: input.issueId, labelId: input.labelId } },
       })
+
+      await triggerEvent(`private-workspace-${issue.project.workspaceId}`, 'issue:updated', { issueId: issue.id, projectId: issue.projectId })
 
       return { success: true }
     }),
@@ -474,6 +502,8 @@ export const issueRouter = router({
         { title: input.title, parentId: input.parentId },
         member.userId
       )
+
+      await triggerEvent(`private-workspace-${parent.project.workspaceId}`, 'issue:created', { issueId: subIssue.id, projectId: subIssue.projectId })
 
       return subIssue
     }),

@@ -49,8 +49,14 @@ export function useRealtime(workspaceId?: string) {
       utils.project.getById.invalidate({ projectId: data.projectId })
     })
 
-    // Listen for comment updates (for later phases)
+    // Listen for comment updates
     channel.bind('comment:created', (data: { issueId: string }) => {
+      utils.comment.getActivityFeed.invalidate({ issueId: data.issueId })
+      utils.issue.getById.invalidate({ issueId: data.issueId })
+    })
+
+    channel.bind('comment:deleted', (data: { issueId: string }) => {
+      utils.comment.getActivityFeed.invalidate({ issueId: data.issueId })
       utils.issue.getById.invalidate({ issueId: data.issueId })
     })
 

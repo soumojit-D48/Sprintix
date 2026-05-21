@@ -18,6 +18,7 @@ import { IssueDueDatePicker } from '@/components/issues/IssueDueDatePicker'
 import { IssueLabelSelect } from '@/components/issues/IssueLabelSelect'
 import { IssueIdentifier } from '@/components/issues/IssueIdentifier'
 import { IssueSubIssues } from '@/components/issues/IssueSubIssues'
+import { IssueActivityFeed } from '@/components/issues/IssueDetail/IssueActivityFeed'
 import { cn } from '@/lib/utils'
 
 export default function IssueDetailPage() {
@@ -192,7 +193,7 @@ export default function IssueDetailPage() {
 
               <Separator />
 
-              {/* Activity & Comments placeholder (wired in Phase 13) */}
+              {/* Activity & Comments */}
               <div>
                 <div className="mb-3 flex items-center gap-2">
                   <MessageSquare className="text-muted-foreground size-4" />
@@ -205,12 +206,7 @@ export default function IssueDetailPage() {
                     </span>
                   )}
                 </div>
-                <div className="border-border rounded-lg border border-dashed p-6 text-center">
-                  <MessageSquare className="text-muted-foreground/30 mx-auto mb-2 size-8" />
-                  <p className="text-muted-foreground text-sm">
-                    Activity feed and comments will be available soon.
-                  </p>
-                </div>
+                <IssueActivityFeed issueId={issue.id} workspaceId={issue.project?.workspaceId} />
               </div>
             </div>
 

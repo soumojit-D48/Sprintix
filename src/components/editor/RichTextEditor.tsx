@@ -143,6 +143,8 @@ export function RichTextEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2] },
+        codeBlock: false,
+        link: false,
       }),
       Placeholder.configure({ placeholder }),
       Link.configure({ openOnClick: true }),

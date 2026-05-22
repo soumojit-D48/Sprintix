@@ -246,23 +246,15 @@ export const commentRouter = router({
 
       const [comments, activityLogs] = await Promise.all([
         prisma.comment.findMany({
-          where: { issueId: input.issueId, deletedAt: null, parentId: null },
+          where: { issueId: input.issueId, deletedAt: null },
           include: {
             author: { select: { id: true, name: true, avatarUrl: true, email: true } },
-            replies: {
-              where: { deletedAt: null },
-              orderBy: { createdAt: 'asc' },
-              include: {
-                author: { select: { id: true, name: true, avatarUrl: true, email: true } },
-                reactions: { select: { id: true, emoji: true, userId: true } },
-              },
-            },
             reactions: { select: { id: true, emoji: true, userId: true } },
           },
           orderBy: { createdAt: 'asc' },
         }),
         prisma.activityLog.findMany({
-          where: { entityId: input.issueId, entityType: 'issue' },
+          where: { entityId: input.issueId, entityType: 'issue', NOT: { action: 'commented' } },
           include: {
             user: { select: { id: true, name: true, avatarUrl: true, email: true } },
           },

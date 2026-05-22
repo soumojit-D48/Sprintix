@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useState, useMemo } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { MessageSquare, Pencil, Trash2, MoreHorizontal, Reply } from 'lucide-react'
 import { trpc } from '@/lib/trpc/provider'
@@ -47,6 +47,22 @@ const ACTION_LABELS: Record<string, (meta: Record<string, unknown>) => string> =
   },
 }
 
+type FeedItem = {
+  type: 'comment' | 'activity'
+  id: string
+  createdAt: Date
+  [key: string]: unknown
+}
+
+type CommentNode = FeedItem & {
+  type: 'comment'
+  author: { id: string; name: string; avatarUrl: string | null; email: string }
+  body: unknown
+  parentId: string | null
+  reactions: { id: string; emoji: string; userId: string }[]
+  children: CommentNode[]
+}
+
 interface IssueActivityFeedProps {
   issueId: string
   workspaceId?: string
@@ -88,25 +104,71 @@ export function IssueActivityFeed({ issueId, workspaceId, currentUserId }: Issue
   })
 
   const [replyTo, setReplyTo] = useState<string | null>(null)
+  const [replyBody, setReplyBody] = useState<unknown>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editBody, setEditBody] = useState<unknown>(null)
   const [newComment, setNewComment] = useState<unknown>(null)
 
+  const commentTree = useMemo(() => {
+    if (!feed) return { roots: [], commentMap: {} }
+
+    const commentMap = new Map<string, CommentNode>()
+    const roots: CommentNode[] = []
+
+    for (const item of feed) {
+      if (item.type !== 'comment') continue
+      const c = item as any
+      const node: CommentNode = {
+        type: 'comment',
+        id: c.id,
+        author: c.author,
+        body: c.body,
+        createdAt: c.createdAt,
+        parentId: c.parentId,
+        reactions: c.reactions ?? [],
+        children: [],
+      }
+      commentMap.set(c.id, node)
+    }
+
+    for (const node of commentMap.values()) {
+      if (node.parentId && commentMap.has(node.parentId)) {
+        commentMap.get(node.parentId)!.children.push(node)
+      } else {
+        roots.push(node)
+      }
+    }
+
+    return { roots, commentMap: Object.fromEntries(commentMap) }
+  }, [feed])
+
+  const mergedFeed = useMemo(() => {
+    if (!feed) return []
+
+    const activityItems = feed.filter((item) => item.type === 'activity')
+    const rootComments = commentTree.roots
+
+    const merged: FeedItem[] = [...activityItems, ...rootComments].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    )
+    return merged
+  }, [feed, commentTree])
+
+  const memberList = (members ?? []).map((m: any) => ({
+    id: m.user.id,
+    name: m.user.name,
+    avatarUrl: m.user.avatarUrl,
+  }))
+
   function handleReactionToggle(commentId: string, emoji: string) {
-    const item = feed?.find((f) => 'id' in f && f.id === commentId)
-    if (!item || !('reactions' in item)) return
-    const reactions = item.reactions as { userId: string; emoji: string }[]
-    const alreadyReacted = reactions.some((r) => r.userId === currentUserId && r.emoji === emoji)
+    const node = commentTree.commentMap[commentId]
+    if (!node) return
+    const alreadyReacted = node.reactions.some((r) => r.userId === currentUserId && r.emoji === emoji)
     if (alreadyReacted) {
       unreact.mutate({ commentId, emoji })
     } else {
       react.mutate({ commentId, emoji })
     }
-  }
-
-  function handleEditComment(commentId: string, body: unknown) {
-    setEditBody(body)
-    setEditingId(commentId)
   }
 
   function handleSaveEdit() {
@@ -117,6 +179,19 @@ export function IssueActivityFeed({ issueId, workspaceId, currentUserId }: Issue
         setEditBody(null)
       },
     })
+  }
+
+  function handleReplySubmit(parentId: string) {
+    if (!replyBody) return
+    createComment.mutate(
+      { issueId, body: replyBody as Record<string, unknown>, parentId },
+      {
+        onSuccess: () => {
+          setReplyTo(null)
+          setReplyBody(null)
+        },
+      }
+    )
   }
 
   if (isLoading) {
@@ -137,7 +212,7 @@ export function IssueActivityFeed({ issueId, workspaceId, currentUserId }: Issue
 
   return (
     <div className="space-y-0">
-      {feed?.map((item) => {
+      {mergedFeed.map((item) => {
         if (item.type === 'activity') {
           const activity = item as any
           const labelFn = ACTION_LABELS[activity.action]
@@ -163,150 +238,32 @@ export function IssueActivityFeed({ issueId, workspaceId, currentUserId }: Issue
           )
         }
 
-        const comment = item as any
-        const isOwn = comment.authorId === currentUserId
-        const timeAgo = formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })
-        const isEditing = editingId === comment.id
+        if (item.type !== 'comment') return null
 
         return (
-          <div key={comment.id} className="group flex items-start gap-3 py-3">
-            <Avatar className="size-8 shrink-0">
-              <AvatarImage src={comment.author?.avatarUrl ?? undefined} />
-              <AvatarFallback className="text-xs">
-                {comment.author?.name?.charAt(0) ?? '?'}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{comment.author?.name ?? 'Unknown'}</span>
-                <span className="text-muted-foreground text-xs">{timeAgo}</span>
-                {comment.editedAt && (
-                  <span className="text-muted-foreground text-xs">(edited)</span>
-                )}
-                {isOwn && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <MoreHorizontal className="text-muted-foreground size-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleEditComment(comment.id, comment.body)}>
-                        <Pencil className="mr-2 size-3.5" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onClick={() => deleteComment.mutate({ commentId: comment.id })}
-                      >
-                        <Trash2 className="mr-2 size-3.5" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </div>
-
-              {isEditing ? (
-                <div className="mt-2 space-y-2">
-                  <MinimalEditor
-                    content={editBody ?? comment.body}
-                    onChange={setEditBody}
-                    placeholder="Edit comment..."
-                  />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={handleSaveEdit} disabled={!editBody}>
-                      Save
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setEditingId(null); setEditBody(null) }}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="prose prose-sm mt-1 max-w-none">
-                  <TipTapRenderer content={comment.body} />
-                </div>
-              )}
-
-              <ReactionSummary
-                reactions={comment.reactions ?? []}
-                currentUserId={currentUserId ?? undefined}
-                onToggle={(emoji) => handleReactionToggle(comment.id, emoji)}
-              />
-
-              <div className="mt-1 flex items-center gap-2">
-                <button
-                  type="button"
-                  className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs transition-colors"
-                  onClick={() => setReplyTo(replyTo === comment.id ? null : comment.id)}
-                >
-                  <Reply className="size-3" />
-                  Reply
-                </button>
-                <EmojiPicker
-                  onSelect={(emoji) => handleReactionToggle(comment.id, emoji)}
-                  side="top"
-                  align="start"
-                >
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs transition-colors"
-                  >
-                    <span className="text-sm">😊</span>
-                  </button>
-                </EmojiPicker>
-              </div>
-
-              {replyTo === comment.id && (
-                <div className="mt-2 ml-4 space-y-2 border-l-2 border-border pl-3">
-                  <MinimalEditor
-                    content={newComment}
-                    onChange={setNewComment}
-                    placeholder="Write a reply..."
-                  />
-                  <Button
-                    size="sm"
-                    disabled={!newComment}
-                    onClick={() => {
-                      createComment.mutate({
-                        issueId,
-                        body: newComment as Record<string, unknown>,
-                        parentId: comment.id,
-                      }, {
-                        onSuccess: () => {
-                          setReplyTo(null)
-                          setNewComment(null)
-                        },
-                      })
-                    }}
-                  >
-                    Reply
-                  </Button>
-                </div>
-              )}
-
-              {comment.replies?.length > 0 && (
-                <div className="mt-2 ml-4 space-y-3 border-l-2 border-border pl-3">
-                  {comment.replies.map((reply: any) => (
-                    <CommentReply
-                      key={reply.id}
-                      reply={reply}
-                      currentUserId={currentUserId ?? undefined}
-                      onReactionToggle={(emoji) => handleReactionToggle(reply.id, emoji)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <CommentThread
+            key={item.id}
+            node={item as CommentNode}
+            currentUserId={currentUserId}
+            issueId={issueId}
+            members={memberList}
+            editingId={editingId}
+            editBody={editBody}
+            replyTo={replyTo}
+            replyBody={replyBody}
+            setEditingId={setEditingId}
+            setEditBody={setEditBody}
+            setReplyTo={setReplyTo}
+            setReplyBody={setReplyBody}
+            handleSaveEdit={handleSaveEdit}
+            handleReplySubmit={handleReplySubmit}
+            handleReactionToggle={handleReactionToggle}
+            deleteComment={deleteComment}
+            updateComment={updateComment}
+          />
         )
       })}
 
-      {/* New comment input */}
       <div className="mt-4 flex items-start gap-3 pt-4 border-t">
         <Avatar className="size-8 shrink-0">
           <AvatarFallback className="text-xs">Y</AvatarFallback>
@@ -316,22 +273,16 @@ export function IssueActivityFeed({ issueId, workspaceId, currentUserId }: Issue
             content={newComment}
             onChange={setNewComment}
             placeholder="Add a comment..."
-            members={(members ?? []).map((m: any) => ({
-              id: m.user.id,
-              name: m.user.name,
-              avatarUrl: m.user.avatarUrl,
-            }))}
+            members={memberList}
           />
           <Button
             size="sm"
             disabled={!newComment}
             onClick={() => {
-              createComment.mutate({
-                issueId,
-                body: newComment as Record<string, unknown>,
-              }, {
-                onSuccess: () => setNewComment(null),
-              })
+              createComment.mutate(
+                { issueId, body: newComment as Record<string, unknown> },
+                { onSuccess: () => setNewComment(null) }
+              )
             }}
           >
             <MessageSquare className="mr-1.5 size-3.5" />
@@ -343,37 +294,209 @@ export function IssueActivityFeed({ issueId, workspaceId, currentUserId }: Issue
   )
 }
 
-function CommentReply({
-  reply,
+function CommentThread({
+  node,
   currentUserId,
-  onReactionToggle,
+  issueId,
+  members,
+  editingId,
+  editBody,
+  replyTo,
+  replyBody,
+  setEditingId,
+  setEditBody,
+  setReplyTo,
+  setReplyBody,
+  handleSaveEdit,
+  handleReplySubmit,
+  handleReactionToggle,
+  deleteComment,
+  updateComment,
+  depth = 0,
 }: {
-  reply: any
+  node: CommentNode
   currentUserId: string | undefined
-  onReactionToggle: (emoji: string) => void
+  issueId: string
+  members: { id: string; name: string; avatarUrl: string | null }[]
+  editingId: string | null
+  editBody: unknown
+  replyTo: string | null
+  replyBody: unknown
+  setEditingId: (id: string | null) => void
+  setEditBody: (body: unknown) => void
+  setReplyTo: (id: string | null) => void
+  setReplyBody: (body: unknown) => void
+  handleSaveEdit: () => void
+  handleReplySubmit: (parentId: string) => void
+  handleReactionToggle: (commentId: string, emoji: string) => void
+  deleteComment: any
+  updateComment: any
+  depth?: number
 }) {
-  const timeAgo = formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true })
+  const isOwn = node.author?.id === currentUserId
+  const timeAgo = formatDistanceToNow(new Date(node.createdAt), { addSuffix: true })
+  const isEditing = editingId === node.id
+  const isReplying = replyTo === node.id
 
   return (
-    <div className="py-2">
-      <div className="flex items-center gap-2">
-        <Avatar className="size-5">
-          <AvatarImage src={reply.author?.avatarUrl ?? undefined} />
-          <AvatarFallback className="text-[10px]">
-            {reply.author?.name?.charAt(0) ?? '?'}
+    <div className={cn(depth > 0 && 'border-l-[1.5px] border-border/50 pl-3')}>
+      <div className="group flex items-start gap-3 py-3">
+        <Avatar className="size-8 shrink-0">
+          <AvatarImage src={node.author?.avatarUrl ?? undefined} />
+          <AvatarFallback className="text-xs">
+            {node.author?.name?.charAt(0) ?? '?'}
           </AvatarFallback>
         </Avatar>
-        <span className="text-sm font-medium">{reply.author?.name ?? 'Unknown'}</span>
-        <span className="text-muted-foreground text-xs">{timeAgo}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">{node.author?.name ?? 'Unknown'}</span>
+            <span className="text-muted-foreground text-xs">{timeAgo}</span>
+            {isOwn && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <MoreHorizontal className="text-muted-foreground size-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => { setEditBody(node.body); setEditingId(node.id) }}>
+                    <Pencil className="mr-2 size-3.5" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => deleteComment.mutate({ commentId: node.id })}
+                  >
+                    <Trash2 className="mr-2 size-3.5" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+
+          {isEditing ? (
+            <div className="mt-2 space-y-2">
+              <MinimalEditor
+                content={editBody ?? node.body}
+                onChange={setEditBody}
+                placeholder="Edit comment..."
+              />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleSaveEdit} disabled={!editBody}>
+                  Save
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => { setEditingId(null); setEditBody(null) }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="prose prose-sm mt-1 max-w-none">
+              <TipTapRenderer content={node.body} />
+            </div>
+          )}
+
+          <ReactionSummary
+            reactions={node.reactions}
+            currentUserId={currentUserId ?? undefined}
+            onToggle={(emoji) => handleReactionToggle(node.id, emoji)}
+          />
+
+          <div className="mt-1 flex items-center gap-2">
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs transition-colors"
+              onClick={() => {
+                if (isReplying) {
+                  setReplyTo(null)
+                  setReplyBody(null)
+                } else {
+                  setReplyTo(node.id)
+                  setReplyBody(null)
+                }
+              }}
+            >
+              <Reply className="size-3" />
+              Reply
+            </button>
+            <EmojiPicker
+              onSelect={(emoji) => handleReactionToggle(node.id, emoji)}
+              side="top"
+              align="start"
+            >
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs transition-colors"
+              >
+                <span className="text-sm">😊</span>
+              </button>
+            </EmojiPicker>
+          </div>
+
+          {isReplying && (
+            <div className="mt-2 space-y-2">
+              <CommentEditor
+                content={replyBody}
+                onChange={setReplyBody}
+                placeholder="Write a reply..."
+                members={members}
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  disabled={!replyBody}
+                  onClick={() => handleReplySubmit(node.id)}
+                >
+                  Reply
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => { setReplyTo(null); setReplyBody(null) }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {node.children.length > 0 && (
+            <div className="mt-1">
+              {node.children.map((child) => (
+                <CommentThread
+                  key={child.id}
+                  node={child}
+                  currentUserId={currentUserId}
+                  issueId={issueId}
+                  members={members}
+                  editingId={editingId}
+                  editBody={editBody}
+                  replyTo={replyTo}
+                  replyBody={replyBody}
+                  setEditingId={setEditingId}
+                  setEditBody={setEditBody}
+                  setReplyTo={setReplyTo}
+                  setReplyBody={setReplyBody}
+                  handleSaveEdit={handleSaveEdit}
+                  handleReplySubmit={handleReplySubmit}
+                  handleReactionToggle={handleReactionToggle}
+                  deleteComment={deleteComment}
+                  updateComment={updateComment}
+                  depth={depth + 1}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-      <div className="prose prose-sm mt-1 max-w-none">
-        <TipTapRenderer content={reply.body} />
-      </div>
-      <ReactionSummary
-        reactions={reply.reactions ?? []}
-        currentUserId={currentUserId ?? undefined}
-        onToggle={onReactionToggle}
-      />
     </div>
   )
 }

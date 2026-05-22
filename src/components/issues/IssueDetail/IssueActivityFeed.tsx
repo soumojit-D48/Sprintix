@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { MessageSquare, Pencil, Trash2, MoreHorizontal, Reply } from 'lucide-react'
+import { MessageSquare, Pencil, Trash2, MoreHorizontal, Reply, Activity, MessageCircle } from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { trpc } from '@/lib/trpc/provider'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -154,6 +155,9 @@ export function IssueActivityFeed({ issueId, workspaceId, currentUserId }: Issue
     return merged
   }, [feed, commentTree])
 
+  const activityCount = useMemo(() => feed?.filter((f) => f.type === 'activity').length ?? 0, [feed])
+  const commentCount = useMemo(() => commentTree.roots.length, [commentTree])
+
   const memberList = (members ?? []).map((m: any) => ({
     id: m.user.id,
     name: m.user.name,
@@ -218,87 +222,133 @@ export function IssueActivityFeed({ issueId, workspaceId, currentUserId }: Issue
   }
 
   return (
-    <div className="space-y-0">
-      {mergedFeed.map((item) => {
-        if (item.type === 'activity') {
-          const activity = item as any
-          const labelFn = ACTION_LABELS[activity.action]
-          const label = labelFn ? labelFn(activity.metadata as Record<string, unknown> ?? {}) : activity.action.replace(/_/g, ' ')
-          const timeAgo = formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true })
+    <Tabs defaultValue="activity">
+      <TabsList className="mb-2">
+        <TabsTrigger value="activity">
+          <Activity className="size-3.5" />
+          Activity ({activityCount})
+        </TabsTrigger>
+        <TabsTrigger value="comments">
+          <MessageCircle className="size-3.5" />
+          Comments ({commentCount})
+        </TabsTrigger>
+      </TabsList>
 
-          return (
-            <div key={activity.id} className="flex items-start gap-3 py-3">
-              <Avatar className="size-6">
-                <AvatarImage src={activity.user?.avatarUrl ?? undefined} />
-                <AvatarFallback className="text-xs">
-                  {activity.user?.name?.charAt(0) ?? '?'}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <p className="text-muted-foreground text-sm">
-                  <span className="text-foreground font-medium">{activity.user?.name ?? 'Unknown'}</span>{' '}
-                  {label}
-                </p>
-                <p className="text-muted-foreground text-xs mt-0.5">{timeAgo}</p>
+      <TabsContent value="activity">
+        <div className="space-y-0">
+          {feed?.filter((f) => f.type === 'activity').map((item) => {
+            const activity = item as any
+            const labelFn = ACTION_LABELS[activity.action]
+            const label = labelFn ? labelFn(activity.metadata as Record<string, unknown> ?? {}) : activity.action.replace(/_/g, ' ')
+            const timeAgo = formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true })
+
+            return (
+              <div key={activity.id} className="flex items-start gap-3 py-3">
+                <Avatar className="size-6">
+                  <AvatarImage src={activity.user?.avatarUrl ?? undefined} />
+                  <AvatarFallback className="text-xs">
+                    {activity.user?.name?.charAt(0) ?? '?'}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <p className="text-muted-foreground text-sm">
+                    <span className="text-foreground font-medium">{activity.user?.name ?? 'Unknown'}</span>{' '}
+                    {label}
+                  </p>
+                  <p className="text-muted-foreground text-xs mt-0.5">{timeAgo}</p>
+                </div>
               </div>
+            )
+          })}
+
+          <div className="mt-4 flex items-start gap-3 pt-4 border-t">
+            <Avatar className="size-8 shrink-0">
+              <AvatarFallback className="text-xs">Y</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 space-y-2">
+              <CommentEditor
+                content={newComment}
+                onChange={setNewComment}
+                placeholder="Add a comment..."
+                members={memberList}
+              />
+              <Button
+                size="sm"
+                disabled={!newComment}
+                onClick={() => {
+                  createComment.mutate(
+                    { issueId, body: newComment as Record<string, unknown> },
+                    { onSuccess: () => setNewComment(null) }
+                  )
+                }}
+              >
+                <MessageSquare className="mr-1.5 size-3.5" />
+                Comment
+              </Button>
             </div>
-          )
-        }
-
-        if (item.type !== 'comment') return null
-
-        return (
-          <CommentThread
-            key={item.id}
-            node={item as CommentNode}
-            currentUserId={currentUserId}
-            issueId={issueId}
-            members={memberList}
-            editingId={editingId}
-            editBody={editBody}
-            replyTo={replyTo}
-            replyBody={replyBody}
-            setEditingId={setEditingId}
-            setEditBody={setEditBody}
-            setReplyTo={setReplyTo}
-            setReplyBody={setReplyBody}
-            handleSaveEdit={handleSaveEdit}
-            handleReplySubmit={handleReplySubmit}
-            handleReactionToggle={handleReactionToggle}
-            deleteComment={deleteComment}
-            updateComment={updateComment}
-            userMap={userMap}
-          />
-        )
-      })}
-
-      <div className="mt-4 flex items-start gap-3 pt-4 border-t">
-        <Avatar className="size-8 shrink-0">
-          <AvatarFallback className="text-xs">Y</AvatarFallback>
-        </Avatar>
-        <div className="flex-1 space-y-2">
-          <CommentEditor
-            content={newComment}
-            onChange={setNewComment}
-            placeholder="Add a comment..."
-            members={memberList}
-          />
-          <Button
-            size="sm"
-            disabled={!newComment}
-            onClick={() => {
-              createComment.mutate(
-                { issueId, body: newComment as Record<string, unknown> },
-                { onSuccess: () => setNewComment(null) }
-              )
-            }}
-          >
-            <MessageSquare className="mr-1.5 size-3.5" />
-            Comment
-          </Button>
+          </div>
         </div>
-      </div>
-    </div>
+      </TabsContent>
+
+      <TabsContent value="comments">
+        <div className="space-y-0">
+          {commentTree.roots.length === 0 ? (
+            <p className="text-muted-foreground text-sm py-4 text-center">No comments yet.</p>
+          ) : (
+            commentTree.roots.map((node) => (
+              <CommentThread
+                key={node.id}
+                node={node}
+                currentUserId={currentUserId}
+                issueId={issueId}
+                members={memberList}
+                editingId={editingId}
+                editBody={editBody}
+                replyTo={replyTo}
+                replyBody={replyBody}
+                setEditingId={setEditingId}
+                setEditBody={setEditBody}
+                setReplyTo={setReplyTo}
+                setReplyBody={setReplyBody}
+                handleSaveEdit={handleSaveEdit}
+                handleReplySubmit={handleReplySubmit}
+                handleReactionToggle={handleReactionToggle}
+                deleteComment={deleteComment}
+                updateComment={updateComment}
+                userMap={userMap}
+              />
+            ))
+          )}
+
+          <div className="mt-4 flex items-start gap-3 pt-4 border-t">
+            <Avatar className="size-8 shrink-0">
+              <AvatarFallback className="text-xs">Y</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 space-y-2">
+              <CommentEditor
+                content={newComment}
+                onChange={setNewComment}
+                placeholder="Add a comment..."
+                members={memberList}
+              />
+              <Button
+                size="sm"
+                disabled={!newComment}
+                onClick={() => {
+                  createComment.mutate(
+                    { issueId, body: newComment as Record<string, unknown> },
+                    { onSuccess: () => setNewComment(null) }
+                  )
+                }}
+              >
+                <MessageSquare className="mr-1.5 size-3.5" />
+                Comment
+              </Button>
+            </div>
+          </div>
+        </div>
+      </TabsContent>
+    </Tabs>
   )
 }
 

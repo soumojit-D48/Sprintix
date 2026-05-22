@@ -516,7 +516,7 @@ function CommentThread({
 function TipTapRenderer({ content }: { content: unknown }) {
   if (!content) return <p className="text-muted-foreground italic">No content</p>
 
-  const json = content as { type?: string; content?: Array<{ type?: string; text?: string; content?: unknown[]; attrs?: Record<string, unknown> }> }
+  const json = content as { type?: string; content?: Array<Record<string, unknown>> }
 
   if (!json.content || json.content.length === 0) {
     return <p className="text-muted-foreground italic">No content</p>
@@ -524,71 +524,109 @@ function TipTapRenderer({ content }: { content: unknown }) {
 
   return (
     <div>
-      {json.content.map((node, i) => {
-        if (node.type === 'paragraph') {
-          const text = extractText(node)
-          if (!text) return null
-          return <p key={i} className="text-sm">{text}</p>
-        }
-        if (node.type === 'heading') {
-          const text = extractText(node)
-          if (!text) return null
-          const level = (node.attrs as Record<string, unknown> | undefined)?.level as number | undefined
-          const hLevel = level ?? 1
-          if (hLevel === 1) return <h1 key={i} className="text-base font-semibold">{text}</h1>
-          if (hLevel === 2) return <h2 key={i} className="text-base font-semibold">{text}</h2>
-          return <h3 key={i} className="text-base font-semibold">{text}</h3>
-        }
-        if (node.type === 'bulletList') {
-          return (
-            <ul key={i} className="ml-4 list-disc text-sm">
-              {node.content?.map((item, j) => (
-                <li key={j}>{extractText(item)}</li>
-              ))}
-            </ul>
-          )
-        }
-        if (node.type === 'orderedList') {
-          return (
-            <ol key={i} className="ml-4 list-decimal text-sm">
-              {node.content?.map((item, j) => (
-                <li key={j}>{extractText(item)}</li>
-              ))}
-            </ol>
-          )
-        }
-        if (node.type === 'codeBlock') {
-          const text = extractText(node)
-          return (
-            <pre key={i} className="bg-muted mt-1 rounded p-2 text-xs">
-              <code>{text}</code>
-            </pre>
-          )
-        }
-        if (node.type === 'blockquote') {
-          const text = extractText(node)
-          return (
-            <blockquote key={i} className="border-l-2 border-border pl-3 text-muted-foreground italic text-sm">
-              {text}
-            </blockquote>
-          )
-        }
-        if (node.type === 'horizontalRule') {
-          return <hr key={i} className="my-2 border-border" />
-        }
-        return null
-      })}
+      {json.content.map((node, i) => renderBlock(node, i))}
     </div>
   )
 }
 
-function extractText(node: unknown): string {
-  if (!node || typeof node !== 'object') return ''
-  const n = node as { text?: string; content?: unknown[] }
-  if (n.text) return n.text
-  if (n.content) {
-    return n.content
-      .map((child) => extractText(child))
+function renderInline(node: Record<string, unknown>, key: number): React.ReactNode {
+  if (node.type === 'mention') {
+    const label = (node.attrs as Record<string, unknown> | undefined)?.label as string | undefined
+    return (
+      <span
+        key={key}
+        className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-sm font-medium text-primary"
+      >
+        @{label ?? 'unknown'}
+      </span>
+    )
+  }
+  if (node.type === 'text') {
+    const marks = node.marks as Array<Record<string, unknown>> | undefined
+    let text = (node.text as string) ?? ''
+    if (marks) {
+      for (const mark of marks) {
+        if (mark.type === 'bold') text = `<strong>${text}</strong>`
+        if (mark.type === 'italic') text = `<em>${text}</em>`
+        if (mark.type === 'code') text = `<code>${text}</code>`
+        if (mark.type === 'link') {
+          const href = (mark.attrs as Record<string, unknown> | undefined)?.href as string | undefined
+          text = `<a href="${href ?? '#'}" class="underline">${text}</a>`
+        }
+      }
+    }
+    if (text.includes('<')) {
+      return <span key={key} dangerouslySetInnerHTML={{ __html: text }} />
+    }
+    return <span key={key}>{text}</span>
+  }
+  return null
+}
+
+function renderInlineContent(content: unknown[] | undefined): React.ReactNode[] | null {
+  if (!content || content.length === 0) return null
+  return content.map((child, i) => renderInline(child as Record<string, unknown>, i))
+}
+
+function renderBlock(node: Record<string, unknown>, key: number): React.ReactNode {
+  if (node.type === 'paragraph') {
+    const children = renderInlineContent(node.content as unknown[] | undefined)
+    if (!children) return null
+    return <p key={key} className="text-sm">{children}</p>
+  }
+  if (node.type === 'heading') {
+    const children = renderInlineContent(node.content as unknown[] | undefined)
+    if (!children) return null
+    const level = (node.attrs as Record<string, unknown> | undefined)?.level as number | undefined
+    const hLevel = level ?? 1
+    const Tag = hLevel === 1 ? 'h1' : hLevel === 2 ? 'h2' : 'h3'
+    return <Tag key={key} className="text-base font-semibold">{children}</Tag>
+  }
+  if (node.type === 'bulletList') {
+    const items = (node.content as unknown[] | undefined)?.map((item, i) => {
+      const text = extractText(item as Record<string, unknown>)
+      return <li key={i}>{text}</li>
+    })
+    if (!items) return null
+    return <ul key={key} className="ml-4 list-disc text-sm">{items}</ul>
+  }
+  if (node.type === 'orderedList') {
+    const items = (node.content as unknown[] | undefined)?.map((item, i) => {
+      const text = extractText(item as Record<string, unknown>)
+      return <li key={i}>{text}</li>
+    })
+    if (!items) return null
+    return <ol key={key} className="ml-4 list-decimal text-sm">{items}</ol>
+  }
+  if (node.type === 'codeBlock') {
+    const text = extractText(node)
+    if (!text) return null
+    return (
+      <pre key={key} className="bg-muted mt-1 rounded p-2 text-xs">
+        <code>{text}</code>
+      </pre>
+    )
+  }
+  if (node.type === 'blockquote') {
+    const children = renderInlineContent(node.content as unknown[] | undefined)
+    if (!children) return null
+    return (
+      <blockquote key={key} className="border-l-2 border-border pl-3 text-muted-foreground italic text-sm">
+        {children}
+      </blockquote>
+    )
+  }
+  if (node.type === 'horizontalRule') {
+    return <hr key={key} className="my-2 border-border" />
+  }
+  return null
+}
+
+function extractText(node: Record<string, unknown>): string {
+  if (node.text) return node.text as string
+  if (node.content) {
+    return (node.content as unknown[])
+      .map((child) => extractText(child as Record<string, unknown>))
       .join('')
   }
   return ''

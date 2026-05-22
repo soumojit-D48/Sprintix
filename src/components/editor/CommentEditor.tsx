@@ -38,7 +38,10 @@ function renderMentionList() {
       const btn = document.createElement('button')
       btn.type = 'button'
       btn.className = `flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors ${index === 0 ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'}`
-      btn.innerHTML = `<span class="font-medium">${item.name}</span>`
+      const avatarHtml = item.avatarUrl
+        ? `<img src="${item.avatarUrl}" alt="" class="size-5 rounded-full object-cover" />`
+        : `<span class="flex size-5 items-center justify-center rounded-full bg-muted text-[10px] font-medium">${item.name.charAt(0)}</span>`
+      btn.innerHTML = `${avatarHtml}<span class="font-medium">${item.name}</span>`
       btn.onmousedown = (e) => e.preventDefault()
       btn.onclick = () => {
         command({ id: item.id, label: item.name })

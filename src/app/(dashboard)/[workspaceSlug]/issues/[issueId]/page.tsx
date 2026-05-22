@@ -38,6 +38,10 @@ export default function IssueDetailPage() {
     { workspaceId: workspace?.id ?? '' },
     { enabled: !!workspace?.id }
   )
+  const { data: currentMember } = trpc.member.getCurrentMember.useQuery(
+    { workspaceId: workspace?.id ?? '' },
+    { enabled: !!workspace?.id }
+  )
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState<unknown>(null)
@@ -206,7 +210,7 @@ export default function IssueDetailPage() {
                     </span>
                   )}
                 </div>
-                <IssueActivityFeed issueId={issue.id} workspaceId={issue.project?.workspaceId} />
+                <IssueActivityFeed issueId={issue.id} workspaceId={issue.project?.workspaceId} currentUserId={currentMember?.user.id} />
               </div>
             </div>
 

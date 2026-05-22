@@ -60,6 +60,14 @@ export function useRealtime(workspaceId?: string) {
       utils.issue.getById.invalidate({ issueId: data.issueId })
     })
 
+    channel.bind('comment:reacted', (data: { issueId: string }) => {
+      utils.comment.getActivityFeed.invalidate({ issueId: data.issueId })
+    })
+
+    channel.bind('comment:unreacted', (data: { issueId: string }) => {
+      utils.comment.getActivityFeed.invalidate({ issueId: data.issueId })
+    })
+
     return () => {
       channel.unbind_all()
       pusher.unsubscribe(channelName)

@@ -48,13 +48,15 @@ interface ReactionSummaryProps {
   reactions: { id: string; emoji: string; userId: string }[]
   currentUserId: string | undefined
   onToggle: (emoji: string) => void
+  userMap: Record<string, { name: string; avatarUrl?: string | null }> | undefined
 }
 
-export function ReactionSummary({ reactions, currentUserId, onToggle }: ReactionSummaryProps) {
-  const grouped = reactions.reduce<Record<string, { count: number; reacted: boolean }>>(
+export function ReactionSummary({ reactions, currentUserId, onToggle, userMap }: ReactionSummaryProps) {
+  const grouped = reactions.reduce<Record<string, { count: number; reacted: boolean; users: string[] }>>(
     (acc, r) => {
-      const existing = acc[r.emoji] ?? { count: 0, reacted: false }
+      const existing = acc[r.emoji] ?? { count: 0, reacted: false, users: [] }
       existing.count++
+      existing.users.push(r.userId)
       if (r.userId === currentUserId) existing.reacted = true
       acc[r.emoji] = existing
       return acc
@@ -66,22 +68,31 @@ export function ReactionSummary({ reactions, currentUserId, onToggle }: Reaction
 
   return (
     <div className="mt-2 flex flex-wrap gap-1">
-      {Object.entries(grouped).map(([emoji, data]) => (
-        <button
-          key={emoji}
-          type="button"
-          className={cn(
-            'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors',
-            data.reacted
-              ? 'border-primary/30 bg-primary/10 text-primary'
-              : 'border-border bg-muted/50 text-muted-foreground hover:bg-muted'
-          )}
-          onClick={() => onToggle(emoji)}
-        >
-          <span>{emoji}</span>
-          <span>{data.count}</span>
-        </button>
-      ))}
+      {Object.entries(grouped).map(([emoji, data]) => {
+        const names = data.users
+          .map((uid) => userMap?.[uid]?.name)
+          .filter(Boolean)
+          .join(', ')
+        const title = names ? `Reacted by: ${names}` : ''
+
+        return (
+          <button
+            key={emoji}
+            type="button"
+            title={title}
+            className={cn(
+              'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors',
+              data.reacted
+                ? 'border-primary/30 bg-primary/10 text-primary'
+                : 'border-border bg-muted/50 text-muted-foreground hover:bg-muted'
+            )}
+            onClick={() => onToggle(emoji)}
+          >
+            <span>{emoji}</span>
+            <span>{data.count}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }

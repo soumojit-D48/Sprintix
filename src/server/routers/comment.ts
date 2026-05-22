@@ -204,13 +204,26 @@ export const commentRouter = router({
 
     if (existing) return existing
 
-    return prisma.reaction.create({
+    await prisma.reaction.deleteMany({
+      where: { userId: user.id, commentId: input.commentId, emoji: { not: input.emoji } },
+    })
+
+    const reaction = await prisma.reaction.create({
       data: {
         emoji: input.emoji,
         userId: user.id,
         commentId: input.commentId,
       },
     })
+
+    await triggerEvent(`private-workspace-${comment.issue.project.workspaceId}`, 'comment:reacted', {
+      issueId: comment.issueId,
+      commentId: input.commentId,
+      emoji: input.emoji,
+      userId: user.id,
+    })
+
+    return reaction
   }),
 
   unreact: protectedProcedure.input(unreactSchema).mutation(async ({ ctx, input }) => {
@@ -232,6 +245,13 @@ export const commentRouter = router({
         commentId: input.commentId,
         emoji: input.emoji,
       },
+    })
+
+    await triggerEvent(`private-workspace-${comment.issue.project.workspaceId}`, 'comment:unreacted', {
+      issueId: comment.issueId,
+      commentId: input.commentId,
+      emoji: input.emoji,
+      userId: user.id,
     })
 
     return { success: true }

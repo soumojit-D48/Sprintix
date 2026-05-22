@@ -66,7 +66,7 @@ type CommentNode = FeedItem & {
 interface IssueActivityFeedProps {
   issueId: string
   workspaceId?: string
-  currentUserId?: string
+  currentUserId: string | undefined
 }
 
 export function IssueActivityFeed({ issueId, workspaceId, currentUserId }: IssueActivityFeedProps) {
@@ -159,6 +159,13 @@ export function IssueActivityFeed({ issueId, workspaceId, currentUserId }: Issue
     name: m.user.name,
     avatarUrl: m.user.avatarUrl,
   }))
+
+  const userMap = Object.fromEntries(
+    (members ?? []).map((m: any) => [
+      m.user.id,
+      { name: m.user.name, avatarUrl: m.user.avatarUrl },
+    ])
+  )
 
   function handleReactionToggle(commentId: string, emoji: string) {
     const node = commentTree.commentMap[commentId]
@@ -260,6 +267,7 @@ export function IssueActivityFeed({ issueId, workspaceId, currentUserId }: Issue
             handleReactionToggle={handleReactionToggle}
             deleteComment={deleteComment}
             updateComment={updateComment}
+            userMap={userMap}
           />
         )
       })}
@@ -313,6 +321,7 @@ function CommentThread({
   deleteComment,
   updateComment,
   depth = 0,
+  userMap,
 }: {
   node: CommentNode
   currentUserId: string | undefined
@@ -332,6 +341,7 @@ function CommentThread({
   deleteComment: any
   updateComment: any
   depth?: number
+  userMap: Record<string, { name: string; avatarUrl?: string | null }> | undefined
 }) {
   const isOwn = node.author?.id === currentUserId
   const timeAgo = formatDistanceToNow(new Date(node.createdAt), { addSuffix: true })
@@ -408,6 +418,7 @@ function CommentThread({
             reactions={node.reactions}
             currentUserId={currentUserId ?? undefined}
             onToggle={(emoji) => handleReactionToggle(node.id, emoji)}
+            userMap={userMap}
           />
 
           <div className="mt-1 flex items-center gap-2">
@@ -491,6 +502,7 @@ function CommentThread({
                   deleteComment={deleteComment}
                   updateComment={updateComment}
                   depth={depth + 1}
+                  userMap={userMap}
                 />
               ))}
             </div>

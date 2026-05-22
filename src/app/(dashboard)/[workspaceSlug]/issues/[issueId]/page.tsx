@@ -38,6 +38,16 @@ export default function IssueDetailPage() {
     { workspaceId: workspace?.id ?? '' },
     { enabled: !!workspace?.id }
   )
+
+  const createLabel = trpc.label.create.useMutation({
+    onSuccess: () => utils.label.list.invalidate({ workspaceId: workspace?.id ?? '' }),
+    onError: (err) => toast.error(err.message),
+  })
+
+  const deleteLabel = trpc.label.delete.useMutation({
+    onSuccess: () => utils.label.list.invalidate({ workspaceId: workspace?.id ?? '' }),
+    onError: (err) => toast.error(err.message),
+  })
   const { data: currentMember } = trpc.member.getCurrentMember.useQuery(
     { workspaceId: workspace?.id ?? '' },
     { enabled: !!workspace?.id }
@@ -112,6 +122,14 @@ export default function IssueDetailPage() {
     } else {
       addLabelMutation.mutate({ issueId, labelId })
     }
+  }
+
+  function handleCreateLabel(name: string, color: string) {
+    createLabel.mutate({ workspaceId: workspace?.id ?? '', name, color })
+  }
+
+  function handleDeleteLabel(labelId: string) {
+    deleteLabel.mutate({ labelId })
   }
 
   if (isLoading) {
@@ -259,6 +277,8 @@ export default function IssueDetailPage() {
                   selectedIds={selectedLabelIds}
                   labels={labelsData ?? []}
                   onToggle={handleLabelToggle}
+                  onCreateLabel={handleCreateLabel}
+                  onDeleteLabel={handleDeleteLabel}
                   size="sm"
                 />
               </Field>

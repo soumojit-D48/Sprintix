@@ -46,6 +46,16 @@ export function IssueSlideOver({
   const { data: members } = trpc.member.list.useQuery({ workspaceId }, { enabled: open })
   const { data: labelsData } = trpc.label.list.useQuery({ workspaceId }, { enabled: open })
 
+  const createLabel = trpc.label.create.useMutation({
+    onSuccess: () => utils.label.list.invalidate({ workspaceId }),
+    onError: (err) => toast.error(err.message),
+  })
+
+  const deleteLabel = trpc.label.delete.useMutation({
+    onSuccess: () => utils.label.list.invalidate({ workspaceId }),
+    onError: (err) => toast.error(err.message),
+  })
+
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState<unknown>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -117,6 +127,14 @@ export function IssueSlideOver({
     } else {
       addLabelMutation.mutate({ issueId, labelId })
     }
+  }
+
+  function handleCreateLabel(name: string, color: string) {
+    createLabel.mutate({ workspaceId, name, color })
+  }
+
+  function handleDeleteLabel(labelId: string) {
+    deleteLabel.mutate({ labelId })
   }
 
   return (
@@ -256,6 +274,8 @@ export function IssueSlideOver({
                           selectedIds={issue.labels?.map((l) => l.labelId) ?? []}
                           labels={labelsData ?? []}
                           onToggle={handleLabelToggle}
+                          onCreateLabel={handleCreateLabel}
+                          onDeleteLabel={handleDeleteLabel}
                           size="sm"
                         />
                       </div>

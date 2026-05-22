@@ -50,6 +50,16 @@ export function IssueCreateModal({
   const { data: labelsData } = trpc.label.list.useQuery({ workspaceId }, { enabled: open })
   const { data: project } = trpc.project.getById.useQuery({ projectId }, { enabled: open })
 
+  const createLabel = trpc.label.create.useMutation({
+    onSuccess: () => utils.label.list.invalidate({ workspaceId }),
+    onError: (err) => toast.error(err.message),
+  })
+
+  const deleteLabel = trpc.label.delete.useMutation({
+    onSuccess: () => utils.label.list.invalidate({ workspaceId }),
+    onError: (err) => toast.error(err.message),
+  })
+
   const createIssue = trpc.issue.create.useMutation({
     onSuccess: (issue) => {
       utils.issue.list.invalidate({ projectId })
@@ -77,6 +87,14 @@ export function IssueCreateModal({
     setLabelIds([])
     setDescription(null)
     setShowDescription(false)
+  }
+
+  function handleCreateLabel(name: string, color: string) {
+    createLabel.mutate({ workspaceId, name, color })
+  }
+
+  function handleDeleteLabel(labelId: string) {
+    deleteLabel.mutate({ labelId })
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -144,6 +162,8 @@ export function IssueCreateModal({
                   prev.includes(id) ? prev.filter((l) => l !== id) : [...prev, id]
                 )
               }
+              onCreateLabel={handleCreateLabel}
+              onDeleteLabel={handleDeleteLabel}
             />
           </div>
 

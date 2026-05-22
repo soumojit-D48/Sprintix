@@ -3,6 +3,13 @@
 import { Check, Plus, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Command,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -47,12 +54,10 @@ export function IssueLabelSelect({
   size = 'default',
 }: IssueLabelSelectProps) {
   const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState('')
   const [newLabelName, setNewLabelName] = useState('')
   const [newLabelColor, setNewLabelColor] = useState('#6366F1')
 
   const selected = labels.filter((l) => selectedIds.includes(l.id))
-  const filtered = labels.filter((l) => l.name.toLowerCase().includes(search.toLowerCase()))
 
   function handleCreateSubmit() {
     if (newLabelName.trim() && onCreateLabel) {
@@ -149,56 +154,52 @@ export function IssueLabelSelect({
         </div>
 
         {/* List section */}
-        <div className="p-1">
+        <Command>
           <div className="px-2 py-1.5">
-            <input
-              placeholder="Search labels..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            />
+            <CommandInput placeholder="Search labels..." className="h-7" />
           </div>
-          <div className="max-h-48 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <p className="text-muted-foreground px-2 py-4 text-center text-xs">
-                {search ? 'No labels match' : 'No labels yet'}
-              </p>
-            ) : (
-              filtered.map((label) => {
-                const isSelected = selectedIds.includes(label.id)
-                return (
-                  <div
-                    key={label.id}
-                    className={cn(
-                      'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors cursor-pointer',
-                      isSelected ? 'bg-accent' : 'hover:bg-muted'
-                    )}
-                    onClick={() => onToggle(label.id)}
-                  >
-                    <div
-                      className="size-3 rounded-full shrink-0"
-                      style={{ backgroundColor: label.color }}
-                    />
-                    <span className="flex-1 truncate">{label.name}</span>
-                    {isSelected && <Check className="size-3.5 shrink-0" />}
-                    {onDeleteLabel && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onDeleteLabel(label.id)
-                        }}
-                        className="text-muted-foreground hover:text-destructive opacity-0 hover:opacity-100 transition-opacity"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    )}
-                  </div>
-                )
-              })
-            )}
-          </div>
-        </div>
+          <CommandList>
+            <CommandGroup>
+              {labels.length === 0 ? (
+                <p className="text-muted-foreground px-2 py-4 text-center text-xs">
+                  No labels yet
+                </p>
+              ) : (
+                labels.map((label) => {
+                  const isSelected = selectedIds.includes(label.id)
+                  return (
+                    <CommandItem
+                      key={label.id}
+                      value={label.name}
+                      onSelect={() => onToggle(label.id)}
+                      className="flex items-center gap-2"
+                    >
+                      <div
+                        className="size-3 rounded-full shrink-0"
+                        style={{ backgroundColor: label.color }}
+                      />
+                      <span className="flex-1 truncate">{label.name}</span>
+                      {isSelected && <Check className="size-3.5 shrink-0" />}
+                      {onDeleteLabel && (
+                        <button
+                          type="button"
+                          onPointerDown={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            onDeleteLabel(label.id)
+                          }}
+                          className="text-muted-foreground hover:text-destructive ml-auto"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      )}
+                    </CommandItem>
+                  )
+                })
+              )}
+            </CommandGroup>
+          </CommandList>
+        </Command>
       </PopoverContent>
     </Popover>
   )

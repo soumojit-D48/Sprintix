@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { trpc } from '@/lib/trpc/provider'
 import { useChatStore } from '@/stores/chat-store'
 import { ChannelCreateDialog } from './ChannelCreateDialog'
+import { DmCreateDialog } from './DmCreateDialog'
 
 interface ChannelListProps {
   workspaceId: string
@@ -22,6 +23,7 @@ export function ChannelList({ workspaceId, workspaceSlug }: ChannelListProps) {
   const [channelsOpen, setChannelsOpen] = useState(true)
   const [dmsOpen, setDmsOpen] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
+  const [dmCreateOpen, setDmCreateOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const unreadCounts = useChatStore((s) => s.unreadCounts)
   const setSearchOpen = useChatStore((s) => s.setSearchOpen)
@@ -132,6 +134,14 @@ export function ChannelList({ workspaceId, workspaceSlug }: ChannelListProps) {
               <span>{dmsOpen ? '▾' : '▸'}</span>
               <span>Direct Messages</span>
             </button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-5"
+              onClick={() => setDmCreateOpen(true)}
+            >
+              <Plus className="size-3" />
+            </Button>
           </div>
 
           {dmsOpen && (
@@ -170,6 +180,12 @@ export function ChannelList({ workspaceId, workspaceSlug }: ChannelListProps) {
         open={createOpen}
         onOpenChange={setCreateOpen}
         workspaceId={workspaceId}
+      />
+      <DmCreateDialog
+        open={dmCreateOpen}
+        onOpenChange={setDmCreateOpen}
+        workspaceId={workspaceId}
+        workspaceSlug={workspaceSlug}
       />
     </aside>
   )

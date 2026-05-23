@@ -311,6 +311,10 @@ export const channelRouter = router({
     const user = await getUser(prisma, ctx.userId!)
     await getWorkspaceMember(prisma, user.id, input.workspaceId)
 
+    if (input.participantId === user.id) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot DM yourself' })
+    }
+
     const targetUser = await prisma.user.findUnique({
       where: { id: input.participantId },
       select: { id: true, name: true },

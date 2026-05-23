@@ -1,10 +1,13 @@
 import { useEffect } from 'react'
 import { getPusherClient } from '@/lib/pusher-client'
 import { trpc } from '@/lib/trpc/provider'
+import { useChatStore } from '@/stores/chat-store'
 import { toast } from 'sonner'
 
 export function useRealtime(workspaceId?: string) {
   const utils = trpc.useUtils()
+  const addTypingUser = useChatStore((s) => s.addTypingUser)
+  const removeTypingUser = useChatStore((s) => s.removeTypingUser)
 
   useEffect(() => {
     if (!workspaceId) return
@@ -27,12 +30,9 @@ export function useRealtime(workspaceId?: string) {
 
     // Listen for issue updates
     channel.bind('issue:updated', (data: { issueId: string; projectId: string }) => {
-      // Invalidate specific issue
       utils.issue.getById.invalidate({ issueId: data.issueId })
-      // Invalidate project issue lists
       utils.issue.list.invalidate({ projectId: data.projectId })
       utils.issue.listBacklog.invalidate({ projectId: data.projectId })
-      // Invalidate user's personal issues
       utils.issue.listForCurrentUser.invalidate({ workspaceId })
     })
 
@@ -68,9 +68,61 @@ export function useRealtime(workspaceId?: string) {
       utils.comment.getActivityFeed.invalidate({ issueId: data.issueId })
     })
 
+    // Listen for message updates
+    channel.bind('message:created', (data: { channelId: string; messageId: string }) => {
+      utils.message.list.invalidate({ channelId: data.channelId })
+      utils.message.getThread.invalidate({ messageId: data.messageId })
+    })
+
+    channel.bind('message:updated', (data: { channelId: string; messageId: string }) => {
+      utils.message.list.invalidate({ channelId: data.channelId })
+      utils.message.getThread.invalidate({ messageId: data.messageId })
+    })
+
+    channel.bind('message:deleted', (data: { channelId: string; messageId: string }) => {
+      utils.message.list.invalidate({ channelId: data.channelId })
+      utils.message.getThread.invalidate({ messageId: data.messageId })
+    })
+
+    channel.bind('message:reacted', (data: { channelId: string; messageId: string }) => {
+      utils.message.list.invalidate({ channelId: data.channelId })
+      utils.message.getThread.invalidate({ messageId: data.messageId })
+    })
+
+    channel.bind('message:unreacted', (data: { channelId: string; messageId: string }) => {
+      utils.message.list.invalidate({ channelId: data.channelId })
+      utils.message.getThread.invalidate({ messageId: data.messageId })
+    })
+
+    channel.bind('message:thread-reply', (data: { channelId: string; messageId: string; parentId: string }) => {
+      utils.message.getThread.invalidate({ messageId: data.parentId })
+      utils.message.list.invalidate({ channelId: data.channelId })
+    })
+
+    // Listen for channel updates
+    channel.bind('channel:created', (data: { channelId: string }) => {
+      utils.channel.list.invalidate({ workspaceId })
+    })
+
+    channel.bind('channel:archived', (data: { channelId: string }) => {
+      utils.channel.list.invalidate({ workspaceId })
+    })
+
+    // Listen for typing indicators (client events)
+    channel.bind('client-typing:start', (data: { channelId: string; userId: string; name: string }) => {
+      addTypingUser(data.channelId, data.userId, data.name || 'Someone')
+      setTimeout(() => {
+        removeTypingUser(data.channelId, data.userId)
+      }, 3500)
+    })
+
+    channel.bind('client-typing:stop', (data: { channelId: string; userId: string }) => {
+      removeTypingUser(data.channelId, data.userId)
+    })
+
     return () => {
       channel.unbind_all()
       pusher.unsubscribe(channelName)
     }
-  }, [workspaceId, utils])
+  }, [workspaceId, utils, addTypingUser, removeTypingUser])
 }

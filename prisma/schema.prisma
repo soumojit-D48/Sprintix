@@ -27,6 +27,7 @@ model User {
   notifications    Notification[]
   sentMessages     Message[]
   activityLogs     ActivityLog[]
+  channelMembers   ChannelMember[]
 }
 
 //  Workspaces 
@@ -249,6 +250,7 @@ model ChannelMember {
   joinedAt   DateTime  @default(now())
   lastReadAt DateTime?
   channel    Channel   @relation(fields: [channelId], references: [id])
+  user       User      @relation(fields: [userId], references: [id])
 
   @@id([channelId, userId])
 }

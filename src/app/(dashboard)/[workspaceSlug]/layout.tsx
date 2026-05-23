@@ -73,6 +73,53 @@ export default async function DashboardLayout({
           identifier: p.identifier,
           color: p.color ?? '#000000',
         }))
+
+        const dbChannels = await prisma.channel.findMany({
+          where: {
+            workspaceId: currentWorkspace.id,
+            archivedAt: null,
+            OR: [
+              { type: 'PUBLIC' },
+              { type: 'PRIVATE', members: { some: { userId: user.id } } },
+            ],
+          },
+          select: { id: true, name: true, type: true },
+          orderBy: { createdAt: 'asc' },
+        })
+
+        const channelMemberships = await prisma.channelMember.findMany({
+          where: {
+            channelId: { in: dbChannels.map((c) => c.id) },
+            userId: user.id,
+          },
+          select: { channelId: true, lastReadAt: true },
+        })
+
+        const lastReadMap = new Map(channelMemberships.map((e) => [e.channelId, e.lastReadAt]))
+
+        const channelsWithUnread = await Promise.all(
+          dbChannels.map(async (channel) => {
+            const lastReadAt = lastReadMap.get(channel.id)
+            let unreadCount = 0
+            if (lastReadAt) {
+              unreadCount = await prisma.message.count({
+                where: {
+                  channelId: channel.id,
+                  createdAt: { gt: lastReadAt },
+                  senderId: { not: user.id },
+                },
+              })
+            }
+            return {
+              id: channel.id,
+              name: channel.name,
+              type: channel.type as 'PUBLIC' | 'PRIVATE' | 'DM',
+              unreadCount: unreadCount > 0 ? unreadCount : undefined,
+            }
+          })
+        )
+
+        channels = channelsWithUnread as { id: string; name: string; type: 'PUBLIC' | 'PRIVATE' | 'DM'; unreadCount?: number }[]
       }
     }
   } catch (error) {

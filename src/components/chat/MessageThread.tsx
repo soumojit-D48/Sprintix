@@ -71,10 +71,11 @@ export function MessageThread() {
   const handleSendReply = () => {
     if (!replyEditor || !parent) return
     const json = replyEditor.getJSON()
+    const content = (json as any)?.content
     const isEmpty =
-      !json ||
-      (json as any)?.content?.length === 0 ||
-      ((json as any)?.content?.length === 1 && (json as any)?.content?.[0]?.text === '')
+      !content ||
+      content.length === 0 ||
+      (content.length === 1 && content[0]?.type === 'paragraph' && (!content[0]?.content || content[0].content.length === 0))
     if (isEmpty) return
 
     sendReply.mutate({

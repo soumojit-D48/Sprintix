@@ -33,6 +33,8 @@ const EMOJI_LIST = ['👍', '❤️', '😂', '🎉', '🚀', '👀']
 
 export function MessageBubble({ message, isFirstInGroup, workspaceSlug }: MessageBubbleProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [showActions, setShowActions] = useState(false)
   const utils = trpc.useUtils()
   const setThreadMessageId = useChatStore((s) => s.setThreadMessageId)
 
@@ -87,7 +89,11 @@ export function MessageBubble({ message, isFirstInGroup, workspaceSlug }: Messag
   }
 
   return (
-    <div className="group relative flex gap-2 px-2 py-0.5 hover:bg-muted/30 transition-colors">
+    <div
+      className="relative flex gap-2 px-2 py-0.5 transition-colors hover:bg-muted/30"
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
+    >
       {isFirstInGroup ? (
         <Avatar className="mt-1 size-8 shrink-0">
           <AvatarImage src={message.sender.avatarUrl ?? ''} alt={message.sender.name ?? ''} />
@@ -140,47 +146,49 @@ export function MessageBubble({ message, isFirstInGroup, workspaceSlug }: Messag
         )}
       </div>
 
-      <div className="absolute top-0 right-2 hidden gap-0.5 group-hover:flex">
-        <DropdownMenu open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-6">
-              <SmilePlus className="size-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="flex gap-1 p-1.5">
-            {EMOJI_LIST.map((emoji) => (
-              <button
-                key={emoji}
-                onClick={() => handleReact(emoji)}
-                className="hover:bg-muted rounded p-1 text-lg transition-colors"
-              >
-                {emoji}
-              </button>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-6"
-          onClick={() => setThreadMessageId(message.id)}
-        >
-          <MessageSquare className="size-3.5" />
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-6">
-              <MoreHorizontal className="size-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={handleDelete}>
-              <Trash2 className="mr-2 size-3.5" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      {(showActions || showEmojiPicker || showMoreMenu) && (
+        <div className="absolute top-0 right-2 flex gap-0.5">
+          <DropdownMenu open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-6">
+                <SmilePlus className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="flex w-auto min-w-0 flex-wrap gap-1 p-1.5">
+              {EMOJI_LIST.map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => handleReact(emoji)}
+                  className="hover:bg-muted rounded p-1 text-lg transition-colors"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            onClick={() => setThreadMessageId(message.id)}
+          >
+            <MessageSquare className="size-3.5" />
+          </Button>
+          <DropdownMenu open={showMoreMenu} onOpenChange={setShowMoreMenu}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-6">
+                <MoreHorizontal className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleDelete}>
+                <Trash2 className="mr-2 size-3.5" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
     </div>
   )
 }

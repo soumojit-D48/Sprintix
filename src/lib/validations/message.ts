@@ -1,14 +1,25 @@
 import { z } from 'zod'
 
+function isTiptapEmpty(body: Record<string, unknown>): boolean {
+  const content = (body as any)?.content
+  if (!content || !Array.isArray(content) || content.length === 0) return true
+  if (content.length === 1 && content[0]?.type === 'paragraph' && (!content[0]?.content || content[0].content.length === 0)) return true
+  return false
+}
+
 export const sendMessageSchema = z.object({
   channelId: z.string().min(1),
-  body: z.record(z.string(), z.any()),
+  body: z.record(z.string(), z.any()).refine((val) => !isTiptapEmpty(val), {
+    message: 'Message body cannot be empty',
+  }),
   parentId: z.string().nullable().optional(),
 })
 
 export const editMessageSchema = z.object({
   messageId: z.string().min(1),
-  body: z.record(z.string(), z.any()),
+  body: z.record(z.string(), z.any()).refine((val) => !isTiptapEmpty(val), {
+    message: 'Message body cannot be empty',
+  }),
 })
 
 export const deleteMessageSchema = z.object({

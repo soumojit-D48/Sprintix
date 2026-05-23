@@ -152,10 +152,11 @@ export function MessageInput({ channelId }: MessageInputProps) {
   const handleSend = useCallback(() => {
     if (!editor) return
     const json = editor.getJSON()
+    const content = (json as any)?.content
     const isEmpty =
-      !json ||
-      (json as any)?.content?.length === 0 ||
-      ((json as any)?.content?.length === 1 && (json as any)?.content?.[0]?.text === '')
+      !content ||
+      content.length === 0 ||
+      (content.length === 1 && content[0]?.type === 'paragraph' && (!content[0]?.content || content[0].content.length === 0))
 
     if (isEmpty) return
 

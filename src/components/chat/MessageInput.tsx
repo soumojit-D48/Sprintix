@@ -1,14 +1,15 @@
 'use client'
 
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
-import { Send, SmilePlus } from 'lucide-react'
+import { Send, SmilePlus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { trpc } from '@/lib/trpc/provider'
 import { useTypingIndicator } from '@/hooks/use-typing-indicator'
+import { useChatStore } from '@/stores/chat-store'
 import { toast } from 'sonner'
 import {
   DropdownMenu,
@@ -25,16 +26,42 @@ const EMOJI_LIST = ['👍', '❤️', '😂', '🎉', '🚀', '👀', '🔥', '�
 export function MessageInput({ channelId }: MessageInputProps) {
   const utils = trpc.useUtils()
   const { handleTyping } = useTypingIndicator(channelId)
-  const enterKeyRef = useRef(false)
+  const editingMessage = useChatStore((s) => s.editingMessage)
+  const clearEditingMessage = useChatStore((s) => s.clearEditingMessage)
 
   const { data: members } = trpc.channel.getMembers.useQuery(
     { channelId },
     { enabled: !!channelId }
   )
 
+  const isEditing = editingMessage?.channelId === channelId
+
   const sendMessage = trpc.message.send.useMutation({
-    onSuccess: (result) => {
+    onSuccess: () => {
       utils.message.list.invalidate({ channelId })
+      editor?.commands.clearContent()
+      editor?.commands.focus()
+    },
+    onError: (err) => {
+      toast.error(err.message)
+    },
+  })
+
+  const editMessage = trpc.message.edit.useMutation({
+    onSuccess: (result) => {
+      utils.message.list.setInfiniteData({ channelId, limit: 50 }, (old) => {
+        if (!old?.pages) return old
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            messages: page.messages.map((m: any) =>
+              m.id === result.id ? { ...m, body: result.body, editedAt: result.editedAt } : m
+            ),
+          })),
+        }
+      })
+      clearEditingMessage()
       editor?.commands.clearContent()
       editor?.commands.focus()
     },
@@ -121,7 +148,7 @@ export function MessageInput({ channelId }: MessageInputProps) {
     immediatelyRender: false,
     extensions: [
       StarterKit,
-      Placeholder.configure({ placeholder: 'Message #channel...' }),
+      Placeholder.configure({ placeholder: isEditing ? 'Edit message...' : 'Message #channel...' }),
       Mention.configure({
         HTMLAttributes: { class: 'mention' },
         suggestion: {
@@ -137,8 +164,12 @@ export function MessageInput({ channelId }: MessageInputProps) {
     editorProps: {
       handleKeyDown: (_, event) => {
         if (event.key === 'Enter' && !event.shiftKey) {
-          enterKeyRef.current = true
           handleSend()
+          return true
+        }
+        if (event.key === 'Escape' && isEditing) {
+          clearEditingMessage()
+          editor?.commands.clearContent()
           return true
         }
         return false
@@ -148,6 +179,13 @@ export function MessageInput({ channelId }: MessageInputProps) {
       handleTyping()
     },
   })
+
+  useEffect(() => {
+    if (isEditing && editingMessage && editor) {
+      editor.commands.setContent(editingMessage.body)
+      editor.commands.focus()
+    }
+  }, [isEditing, editingMessage?.id])
 
   const handleSend = useCallback(() => {
     if (!editor) return
@@ -160,11 +198,24 @@ export function MessageInput({ channelId }: MessageInputProps) {
 
     if (isEmpty) return
 
-    sendMessage.mutate({
-      channelId,
-      body: json as Record<string, any>,
-    })
-  }, [editor, channelId, sendMessage])
+    if (isEditing && editingMessage) {
+      editMessage.mutate({
+        messageId: editingMessage.id,
+        body: json as Record<string, any>,
+      })
+    } else {
+      sendMessage.mutate({
+        channelId,
+        body: json as Record<string, any>,
+      })
+    }
+  }, [editor, channelId, sendMessage, isEditing, editingMessage, editMessage])
+
+  const handleCancelEdit = () => {
+    clearEditingMessage()
+    editor?.commands.clearContent()
+    editor?.commands.focus()
+  }
 
   const handleEmojiSelect = (emoji: string) => {
     if (!editor) return
@@ -175,6 +226,22 @@ export function MessageInput({ channelId }: MessageInputProps) {
 
   return (
     <div className="border-t px-4 py-3">
+      {isEditing && (
+        <div className="mb-1 flex items-center justify-between rounded-t-lg bg-muted/50 px-3 py-1.5">
+          <div className="flex items-center gap-2">
+            <Pencil className="text-muted-foreground size-3.5" />
+            <span className="text-muted-foreground text-xs font-medium">Editing message</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-5"
+            onClick={handleCancelEdit}
+          >
+            <X className="size-3" />
+          </Button>
+        </div>
+      )}
       <div className="border-border focus-within:border-ring flex items-end gap-2 rounded-lg border bg-background p-1">
         <EditorContent
           editor={editor}
@@ -203,12 +270,31 @@ export function MessageInput({ channelId }: MessageInputProps) {
             size="icon"
             className="size-8"
             onClick={handleSend}
-            disabled={sendMessage.isPending}
+            disabled={sendMessage.isPending || editMessage.isPending}
           >
             <Send className="size-4" />
           </Button>
         </div>
       </div>
     </div>
+  )
+}
+
+function Pencil(props: any) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </svg>
   )
 }

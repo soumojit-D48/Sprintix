@@ -6,12 +6,19 @@ interface TypingUser {
   expiresAt: number
 }
 
+interface EditingMessage {
+  id: string
+  channelId: string
+  body: Record<string, unknown>
+}
+
 interface ChatState {
   activeChannelId: string | null
   unreadCounts: Record<string, number>
   typingUsers: Record<string, TypingUser[]>
   threadMessageId: string | null
   searchOpen: boolean
+  editingMessage: EditingMessage | null
 
   setActiveChannel: (channelId: string | null) => void
   setUnreadCount: (channelId: string, count: number) => void
@@ -22,6 +29,8 @@ interface ChatState {
   clearTypingUsers: (channelId: string) => void
   setThreadMessageId: (messageId: string | null) => void
   setSearchOpen: (open: boolean) => void
+  setEditingMessage: (msg: EditingMessage | null) => void
+  clearEditingMessage: () => void
 }
 
 export const useChatStore = create<ChatState>()((set) => ({
@@ -30,6 +39,7 @@ export const useChatStore = create<ChatState>()((set) => ({
   typingUsers: {},
   threadMessageId: null,
   searchOpen: false,
+  editingMessage: null,
 
   setActiveChannel: (channelId) => set({ activeChannelId: channelId }),
 
@@ -80,4 +90,8 @@ export const useChatStore = create<ChatState>()((set) => ({
   setThreadMessageId: (messageId) => set({ threadMessageId: messageId }),
 
   setSearchOpen: (open) => set({ searchOpen: open }),
+
+  setEditingMessage: (msg) => set({ editingMessage: msg }),
+
+  clearEditingMessage: () => set({ editingMessage: null }),
 }))

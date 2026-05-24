@@ -35,11 +35,12 @@ interface MessageBubbleProps {
   isFirstInGroup: boolean
   isLastInGroup: boolean
   workspaceSlug: string
+  currentUserId: string
 }
 
 const EMOJI_LIST = ['👍', '❤️', '😂', '🎉', '🚀', '👀']
 
-export function MessageBubble({ message, isFirstInGroup, workspaceSlug }: MessageBubbleProps) {
+export function MessageBubble({ message, isFirstInGroup, workspaceSlug, currentUserId }: MessageBubbleProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [showActions, setShowActions] = useState(false)
@@ -194,23 +195,25 @@ export function MessageBubble({ message, isFirstInGroup, workspaceSlug }: Messag
             >
               <MessageSquare className="size-3.5" />
             </Button>
-            <DropdownMenu open={showMoreMenu} onOpenChange={setShowMoreMenu}>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-6">
-                  <MoreHorizontal className="size-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleEdit}>
-                  <Pencil className="mr-2 size-3.5" />
-                  Edit
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => { setShowMoreMenu(false); setDeleteDialogOpen(true) }}>
-                  <Trash2 className="mr-2 size-3.5" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {currentUserId === message.senderId && (
+              <DropdownMenu open={showMoreMenu} onOpenChange={setShowMoreMenu}>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-6">
+                    <MoreHorizontal className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleEdit}>
+                    <Pencil className="mr-2 size-3.5" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => { setShowMoreMenu(false); setDeleteDialogOpen(true) }}>
+                    <Trash2 className="mr-2 size-3.5" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         )}
       </div>

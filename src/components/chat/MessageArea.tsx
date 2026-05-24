@@ -12,6 +12,7 @@ import { useChatStore } from '@/stores/chat-store'
 
 interface MessageAreaProps {
   channelId: string
+  currentUserId: string
 }
 
 function groupMessages(messages: any[]) {
@@ -61,7 +62,7 @@ function getDateDividers(messages: any[]) {
   return dividers
 }
 
-export function MessageArea({ channelId }: MessageAreaProps) {
+export function MessageArea({ channelId, currentUserId }: MessageAreaProps) {
   const params = useParams()
   const workspaceSlug = params.workspaceSlug as string
   const [atBottom, setAtBottom] = useState(true)
@@ -204,6 +205,7 @@ export function MessageArea({ channelId }: MessageAreaProps) {
                   isFirstInGroup={msgIdx === 0}
                   isLastInGroup={msgIdx === group.messages.length - 1}
                   workspaceSlug={workspaceSlug}
+                  currentUserId={currentUserId}
                 />
               ))}
             </div>

@@ -13,7 +13,7 @@ import { trpc } from '@/lib/trpc/provider'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 
-export function ChatLayout() {
+export function ChatLayout({ currentUserId }: { currentUserId: string }) {
   const params = useParams()
   const workspaceSlug = params.workspaceSlug as string
   const channelId = params.channelId as string | undefined
@@ -76,7 +76,7 @@ export function ChatLayout() {
                 </span>
               )}
             </div>
-            <MessageArea channelId={channel.id} />
+            <MessageArea channelId={channel.id} currentUserId={currentUserId} />
             <MessageInput channelId={channel.id} />
           </>
         ) : (

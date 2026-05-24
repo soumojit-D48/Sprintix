@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { trpc } from '@/lib/trpc/provider'
 import { useChatStore } from '@/stores/chat-store'
+import { MessageReactions } from './MessageReactions'
 import { toast } from 'sonner'
 
 function ReadOnlyContent({ content }: { content: any }) {
@@ -132,6 +133,7 @@ export function MessageThread() {
                   <div className="text-sm">
                     <ReadOnlyContent content={parent.body} />
                   </div>
+                  <MessageReactions message={parent} threadRootId={threadMessageId!} />
                 </div>
               </div>
 
@@ -158,6 +160,7 @@ export function MessageThread() {
                     <div className="text-sm">
                       <ReadOnlyContent content={reply.body} />
                     </div>
+                    <MessageReactions message={reply} threadRootId={threadMessageId!} />
                   </div>
                 </div>
               ))}

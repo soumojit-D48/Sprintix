@@ -1,8 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { useParams } from 'next/navigation'
-import { Archive, Plus, Circle, Search, ChevronDown, ChevronRight } from 'lucide-react'
+import { useParams, useRouter } from 'next/navigation'
+import {
+  Archive,
+  Plus,
+  Circle,
+  Search,
+  ChevronDown,
+  ChevronRight,
+  GitFork,
+  Play,
+  Loader2,
+} from 'lucide-react'
 import { trpc } from '@/lib/trpc/provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +22,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { IssueIdentifier } from '@/components/issues/IssueIdentifier'
 import { IssueCreateModal } from '@/components/issues/IssueCreateModal'
 import { IssueSlideOver } from '@/components/issues/IssueSlideOver'
+import { SprintCreateModal } from '@/components/sprints/SprintCreateModal'
+import { SprintProgress } from '@/components/sprints/SprintProgress'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 const STATUS_META: Record<string, { label: string; color: string; order: number }> = {
   BACKLOG: { label: 'Backlog', color: 'text-gray-400', order: 0 },
@@ -32,21 +45,51 @@ const PRIORITY_META: Record<string, { label: string; color: string }> = {
 }
 
 export default function BacklogPage() {
+  const router = useRouter()
   const params = useParams()
   const projectId = params.projectId as string
   const workspaceSlug = params.workspaceSlug as string
 
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const [sprintCreateOpen, setSprintCreateOpen] = useState(false)
   const [slideOverIssueId, setSlideOverIssueId] = useState<string | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
   const { data: project } = trpc.project.getById.useQuery({ projectId })
 
+  const { data: sprints } = trpc.sprint.list.useQuery({ projectId })
   const { data: backlogIssues = [], isLoading, refetch } = trpc.issue.listBacklog.useQuery({
     projectId,
     search: search.trim() || undefined,
   })
+
+  const utils = trpc.useUtils()
+
+  const startSprint = trpc.sprint.start.useMutation({
+    onSuccess: (data) => {
+      utils.sprint.list.invalidate({ projectId })
+      utils.project.getById.invalidate({ projectId })
+      toast.success(`${data.name} started`)
+    },
+    onError: (err) => {
+      toast.error(err.message)
+    },
+  })
+
+  const addIssueToSprint = trpc.sprint.addIssue.useMutation({
+    onSuccess: () => {
+      utils.sprint.list.invalidate({ projectId })
+      utils.issue.listBacklog.invalidate({ projectId })
+      toast.success('Issues added to sprint')
+    },
+    onError: (err) => {
+      toast.error(err.message)
+    },
+  })
+
+  const activeSprint = sprints?.find((s) => s.status === 'ACTIVE')
+  const plannedSprint = sprints?.find((s) => s.status === 'PLANNED')
 
   // Group by status
   const grouped = backlogIssues.reduce<Record<string, typeof backlogIssues>>((acc, issue) => {
@@ -69,6 +112,12 @@ export default function BacklogPage() {
     })
   }
 
+  async function handleAddAllToSprint(sprintId: string) {
+    const issueIds = backlogIssues.map((i) => i.id)
+    if (issueIds.length === 0) return
+    addIssueToSprint.mutate({ sprintId, issueIds })
+  }
+
   const totalCount = backlogIssues.length
 
   return (
@@ -83,9 +132,13 @@ export default function BacklogPage() {
           <Badge variant="secondary" className="text-xs">
             {totalCount} issue{totalCount !== 1 ? 's' : ''}
           </Badge>
+          {(sprints?.length ?? 0) > 0 && (
+            <Badge variant="outline" className="text-xs">
+              {sprints?.length} sprint{(sprints?.length ?? 0) !== 1 ? 's' : ''}
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          {/* Search */}
           <div className="relative">
             <Search className="text-muted-foreground absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2" />
             <Input
@@ -102,7 +155,157 @@ export default function BacklogPage() {
         </div>
       </div>
 
-      {/* Content */}
+      {/* Sprint planning section */}
+      {activeSprint && (
+        <div className="border-b bg-green-50/30 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <GitFork className="size-4 text-green-600" />
+              <span className="text-sm font-semibold text-green-800">
+                {activeSprint.name}
+              </span>
+              <Badge
+                variant="outline"
+                className="border-green-200 bg-green-100 text-[10px] text-green-700"
+              >
+                Active
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  router.push(`/${workspaceSlug}/projects/${projectId}/sprints/${activeSprint.id}`)
+                }
+              >
+                View Sprint
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleAddAllToSprint(activeSprint.id)}
+                disabled={totalCount === 0 || addIssueToSprint.isPending}
+              >
+                {addIssueToSprint.isPending && (
+                  <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                )}
+                Add All to Sprint
+              </Button>
+            </div>
+          </div>
+          <SprintProgress
+            completedIssues={activeSprint.completedIssueCount}
+            totalIssues={activeSprint.issueCount}
+            className="mt-2"
+          />
+          <p className="text-muted-foreground mt-1 text-xs">
+            {new Date(activeSprint.startDate).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+            })}{' '}
+            –{' '}
+            {new Date(activeSprint.endDate).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })}
+          </p>
+        </div>
+      )}
+
+      {plannedSprint && !activeSprint && (
+        <div className="border-b bg-blue-50/30 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <GitFork className="size-4 text-blue-600" />
+              <span className="text-sm font-semibold text-blue-800">
+                {plannedSprint.name}
+              </span>
+              <Badge
+                variant="outline"
+                className="border-blue-200 bg-blue-100 text-[10px] text-blue-700"
+              >
+                Planned
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              {plannedSprint.issueCount > 0 && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => startSprint.mutate({ sprintId: plannedSprint.id })}
+                  disabled={startSprint.isPending}
+                >
+                  {startSprint.isPending ? (
+                    <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                  ) : (
+                    <Play className="mr-1.5 size-3.5" />
+                  )}
+                  Start Sprint
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleAddAllToSprint(plannedSprint.id)}
+                disabled={totalCount === 0 || addIssueToSprint.isPending}
+              >
+                {addIssueToSprint.isPending && (
+                  <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                )}
+                Add All to Sprint
+              </Button>
+            </div>
+          </div>
+          <p className="text-muted-foreground mt-1 text-xs">
+            {plannedSprint.issueCount} issue{plannedSprint.issueCount !== 1 ? 's' : ''} ·{' '}
+            {new Date(plannedSprint.startDate).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+            })}{' '}
+            –{' '}
+            {new Date(plannedSprint.endDate).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })}
+            {new Date(plannedSprint.startDate) < new Date() && (
+              <span className="ml-2 text-yellow-600">
+                (Start date has passed)
+              </span>
+            )}
+          </p>
+        </div>
+      )}
+
+      {!activeSprint && !plannedSprint && (
+        <div className="border-b px-6 py-3">
+          <div className="flex items-center gap-2">
+            <GitFork className="text-muted-foreground size-4" />
+            <span className="text-muted-foreground text-sm">No active sprint</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-2 h-7 text-xs"
+              onClick={() => setSprintCreateOpen(true)}
+            >
+              <Plus className="mr-1 size-3" />
+              Create Sprint
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs"
+              onClick={() => router.push(`/${workspaceSlug}/projects/${projectId}/sprints`)}
+            >
+              View all
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Backlog content */}
       {isLoading ? (
         <div className="space-y-2 p-6">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -154,6 +357,38 @@ export default function BacklogPage() {
                   />
                   <span className="text-sm font-medium">{meta?.label ?? status}</span>
                   <span className="text-muted-foreground text-xs">{issues.length}</span>
+
+                  {/* Add these issues to active/planned sprint */}
+                  {plannedSprint && plannedSprint.issueCount === 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        addIssueToSprint.mutate({
+                          sprintId: plannedSprint.id,
+                          issueIds: issues.map((i) => i.id),
+                        })
+                      }}
+                      className="text-muted-foreground hover:text-foreground ml-auto text-xs underline-offset-2 hover:underline"
+                    >
+                      Add to sprint
+                    </button>
+                  )}
+                  {activeSprint && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        addIssueToSprint.mutate({
+                          sprintId: activeSprint.id,
+                          issueIds: issues.map((i) => i.id),
+                        })
+                      }}
+                      className="text-muted-foreground hover:text-foreground ml-auto text-xs underline-offset-2 hover:underline"
+                    >
+                      Add to sprint
+                    </button>
+                  )}
                 </button>
 
                 {/* Issues in group */}
@@ -267,6 +502,15 @@ export default function BacklogPage() {
             workspaceId={project.workspaceId}
             workspaceSlug={workspaceSlug}
             onCreated={refetch}
+          />
+          <SprintCreateModal
+            open={sprintCreateOpen}
+            onOpenChange={setSprintCreateOpen}
+            projectId={projectId}
+            onCreated={() => {
+              utils.sprint.list.invalidate({ projectId })
+              utils.project.getById.invalidate({ projectId })
+            }}
           />
           <IssueSlideOver
             open={!!slideOverIssueId}

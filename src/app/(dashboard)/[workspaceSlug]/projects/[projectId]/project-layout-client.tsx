@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { LayoutPanelTop, List, CalendarRange, Archive, Settings, ChevronDown } from 'lucide-react'
+import { LayoutPanelTop, List, CalendarRange, Archive, GitFork, Settings, ChevronDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Progress } from '@/components/ui/progress'
@@ -37,6 +37,7 @@ const tabs = [
   { label: 'List', href: 'list', icon: List },
   { label: 'Timeline', href: 'timeline', icon: CalendarRange },
   { label: 'Backlog', href: 'backlog', icon: Archive },
+  { label: 'Sprints', href: 'sprints', icon: GitFork },
   { label: 'Settings', href: 'settings', icon: Settings },
 ]
 

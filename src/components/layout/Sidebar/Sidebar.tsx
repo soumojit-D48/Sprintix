@@ -11,6 +11,7 @@ import {
   MessageSquare,
   MessageSquareText,
   Settings,
+  GitFork,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -59,6 +60,7 @@ const mainNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/[workspaceSlug]', icon: LayoutDashboard },
   { title: 'My Issues', href: '/[workspaceSlug]/issues', icon: FolderKanban },
   { title: 'Projects', href: '/[workspaceSlug]/projects', icon: FolderKanban },
+  { title: 'Sprints', href: '/[workspaceSlug]/sprints', icon: GitFork },
   { title: 'Chat', href: '/[workspaceSlug]/chat', icon: MessageSquareText },
   { title: 'Members', href: '/[workspaceSlug]/members', icon: Users },
   { title: 'Analytics', href: '/[workspaceSlug]/analytics', icon: BarChart3 },

@@ -46,7 +46,9 @@ export function SprintCard({
   const StatusIcon = statusIcons[status] ?? Circle
   const isActive = status === 'ACTIVE'
 
-  const dateRange = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  const dateRange = `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
 
   return (
     <Link

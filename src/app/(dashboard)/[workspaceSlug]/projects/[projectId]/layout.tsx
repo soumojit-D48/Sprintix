@@ -34,28 +34,38 @@ export default async function ProjectLayout({
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: {
-      _count: {
-        select: {
-          issues: { where: { deletedAt: null } },
-        },
-      },
-      issues: {
-        where: { deletedAt: null },
-        select: { id: true, status: true },
-      },
-      sprints: {
-        where: { status: 'ACTIVE' },
-        take: 1,
-        select: { id: true, name: true, status: true },
-      },
+    select: {
+      id: true,
+      name: true,
+      identifier: true,
+      color: true,
+      status: true,
+      leadId: true,
     },
   })
 
   if (!project) notFound()
 
-  const totalIssues = project.issues.length
-  const doneIssues = project.issues.filter((i) => i.status === 'DONE').length
+  const [activeSprints] = await Promise.all([
+    prisma.sprint.findMany({
+      where: { projectId, status: 'ACTIVE' },
+      take: 1,
+      select: { id: true, name: true, status: true },
+    }),
+  ])
+
+  const issueCounts = await prisma.issue.groupBy({
+    by: ['status'],
+    where: { projectId, deletedAt: null },
+    _count: true,
+  })
+
+  const countsMap: Record<string, number> = {}
+  for (const item of issueCounts) {
+    countsMap[item.status] = item._count
+  }
+  const totalIssues = Object.values(countsMap).reduce((s, v) => s + v, 0)
+  const doneIssues = countsMap['DONE'] ?? 0
   const progress = totalIssues > 0 ? Math.round((doneIssues / totalIssues) * 100) : 0
 
   let lead = null
@@ -78,7 +88,7 @@ export default async function ProjectLayout({
         progress,
         totalIssueCount: totalIssues,
       }}
-      activeSprint={project.sprints[0] ?? null}
+      activeSprint={activeSprints[0] ?? null}
       workspaceSlug={workspaceSlug}
     >
       {children}

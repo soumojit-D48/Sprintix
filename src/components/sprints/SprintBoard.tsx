@@ -1,19 +1,34 @@
 'use client'
 
-import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragStartEvent,
+  DragOverEvent,
+  DragEndEvent,
+  defaultDropAnimationSideEffects,
+} from '@dnd-kit/core'
+import { sortableKeyboardCoordinates, arrayMove } from '@dnd-kit/sortable'
+import { Plus, Loader2 } from 'lucide-react'
 import { trpc } from '@/lib/trpc/provider'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { IssueIdentifier } from '@/components/issues/IssueIdentifier'
+import { KanbanColumn } from '@/components/kanban/KanbanColumn'
+import { KanbanCard } from '@/components/kanban/KanbanCard'
 import { IssueCreateModal } from '@/components/issues/IssueCreateModal'
 import { IssueSlideOver } from '@/components/issues/IssueSlideOver'
 import { SprintProgress } from './SprintProgress'
 import { SprintBurndown } from './SprintBurndown'
 import { SprintCloseModal } from './SprintCloseModal'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 const COLUMNS = [
   { key: 'BACKLOG', label: 'Backlog', color: 'bg-gray-500' },
@@ -22,7 +37,7 @@ const COLUMNS = [
   { key: 'IN_REVIEW', label: 'In Review', color: 'bg-purple-500' },
   { key: 'DONE', label: 'Done', color: 'bg-green-500' },
   { key: 'CANCELLED', label: 'Cancelled', color: 'bg-red-400' },
-]
+] as const
 
 const priorityOrder: Record<string, number> = {
   URGENT: 0,
@@ -53,17 +68,14 @@ export function SprintBoard({
   const { data: stats } = trpc.sprint.getStats.useQuery({ sprintId })
 
   const utils = trpc.useUtils()
-  const addIssue = trpc.sprint.addIssue.useMutation({
+
+  const startSprint = trpc.sprint.start.useMutation({
     onSuccess: () => {
       utils.sprint.getById.invalidate({ sprintId })
       utils.sprint.list.invalidate({ projectId })
     },
-  })
-
-  const removeIssue = trpc.sprint.removeIssue.useMutation({
-    onSuccess: () => {
-      utils.sprint.getById.invalidate({ sprintId })
-      utils.sprint.list.invalidate({ projectId })
+    onError: (err) => {
+      toast.error(err.message)
     },
   })
 
@@ -94,15 +106,148 @@ export function SprintBoard({
     )
   }
 
-  const issues = sprint.issues ?? []
-  const completedIssues = issues.filter((i) => i.status === 'DONE').length
+  const issues = useMemo(
+    () => (sprint.issues?.map((i) => ({ ...i, dueDate: i.dueDate ?? null })) ?? []),
+    [sprint.issues]
+  )
+  const completedIssues = useMemo(() => issues.filter((i) => i.status === 'DONE').length, [issues])
 
-  const groupedIssues = COLUMNS.map((col) => ({
-    ...col,
-    issues: issues
-      .filter((i) => i.status === col.key)
-      .sort((a, b) => (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99)),
-  }))
+  const [columns, setColumns] = useState(
+    COLUMNS.map((col) => ({
+      ...col,
+      issues: issues
+        .filter((i) => i.status === col.key)
+        .sort((a, b) => (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99) || a.order - b.order),
+    }))
+  )
+  const [activeIssue, setActiveIssue] = useState<(typeof columns)[number]['issues'][number] | null>(null)
+
+  useEffect(() => {
+    setColumns(
+      COLUMNS.map((col) => ({
+        ...col,
+        issues: issues
+          .filter((i) => i.status === col.key)
+          .sort((a, b) => (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99) || a.order - b.order),
+      }))
+    )
+  }, [issues])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  const updateStatus = trpc.issue.updateStatus.useMutation({
+    onSuccess: () => {
+      utils.sprint.getById.invalidate({ sprintId })
+      utils.sprint.list.invalidate({ projectId })
+    },
+  })
+
+  function handleDragStart(event: DragStartEvent) {
+    const id = event.active.id as string
+    for (const col of columns) {
+      const found = col.issues.find((i) => i.id === id)
+      if (found) { setActiveIssue(found); break }
+    }
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const isActiveTask = active.data.current?.type === 'Issue'
+    const isOverTask = over.data.current?.type === 'Issue'
+    const isOverColumn = over.data.current?.type === 'Column'
+    if (!isActiveTask) return
+
+    setColumns((cols) => {
+      const activeColIndex = cols.findIndex((c) => c.issues.some((i) => i.id === active.id))
+      let overColIndex = -1
+      if (isOverTask) overColIndex = cols.findIndex((c) => c.issues.some((i) => i.id === over.id))
+      else if (isOverColumn) overColIndex = cols.findIndex((c) => c.key === over.id)
+      if (activeColIndex === -1 || overColIndex === -1) return cols
+
+      const activeCol = cols[activeColIndex]
+      const overCol = cols[overColIndex]
+      if (!activeCol || !overCol) return cols
+
+      if (activeCol.key === overCol.key) return cols
+
+      const activeIssueIndex = activeCol.issues.findIndex((i) => i.id === active.id)
+      const issueToMove = activeCol.issues[activeIssueIndex]
+      if (!issueToMove) return cols
+
+      let newIndex = overCol.issues.length
+      if (isOverTask) {
+        const overIssueIndex = overCol.issues.findIndex((i) => i.id === over.id)
+        if (overIssueIndex >= 0) {
+          const isBelow = over.rect && active.rect.current.translated &&
+            active.rect.current.translated.top > over.rect.top + over.rect.height / 2
+          newIndex = overIssueIndex + (isBelow ? 1 : 0)
+        }
+      }
+
+      const newCols = [...cols]
+      newCols[activeColIndex] = { ...activeCol, issues: activeCol.issues.filter((i) => i.id !== active.id) }
+      const newIssues = [...overCol.issues]
+      newIssues.splice(newIndex, 0, { ...issueToMove, status: overCol.key })
+      newCols[overColIndex] = { ...overCol, issues: newIssues }
+      return newCols
+    })
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveIssue(null)
+    const { active, over } = event
+    if (!over) return
+    const activeId = active.id as string
+
+    setColumns((cols) => {
+      const activeColIndex = cols.findIndex((c) => c.issues.some((i) => i.id === activeId))
+      let overColIndex = cols.findIndex((c) => c.issues.some((i) => i.id === over.id))
+      if (overColIndex === -1) overColIndex = cols.findIndex((c) => c.key === over.id)
+      if (activeColIndex === -1 || overColIndex === -1) return cols
+
+      const activeCol = cols[activeColIndex]
+      const overCol = cols[overColIndex]
+      if (!activeCol || !overCol) return cols
+
+      if (activeColIndex === overColIndex) {
+        const oldIndex = activeCol.issues.findIndex((i) => i.id === activeId)
+        let newIndex = overCol.issues.findIndex((i) => i.id === over.id)
+        if (newIndex === -1) newIndex = overCol.issues.length - 1
+        const newIssues = arrayMove(activeCol.issues, oldIndex, newIndex)
+        let newOrder = Date.now()
+        if (newIssues.length > 1) {
+          if (newIndex === 0) newOrder = (newIssues[1]?.order ?? Date.now()) - 1000
+          else if (newIndex === newIssues.length - 1) newOrder = (newIssues[newIndex - 1]?.order ?? Date.now()) + 1000
+          else {
+            const prev = newIssues[newIndex - 1]
+            const next = newIssues[newIndex + 1]
+            if (prev && next) newOrder = (prev.order + next.order) / 2
+          }
+        }
+        newIssues[newIndex] = { ...newIssues[newIndex], order: newOrder } as never
+        const newCols = [...cols]
+        newCols[activeColIndex] = { ...activeCol, issues: newIssues }
+        return newCols
+      }
+
+      const movedIssue = activeCol.issues.find((i) => i.id === activeId)
+      if (movedIssue) {
+        updateStatus.mutate({ issueId: activeId, status: overCol.key })
+      }
+      return cols
+    })
+  }
+
+  const dropAnimation = {
+    sideEffects: defaultDropAnimationSideEffects({
+      styles: { active: { opacity: '0.5' } },
+    }),
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -145,6 +290,17 @@ export function SprintBoard({
           </div>
 
           <div className="flex items-center gap-2">
+            {sprint.status === 'PLANNED' && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => startSprint.mutate({ sprintId })}
+                disabled={startSprint.isPending}
+              >
+                {startSprint.isPending && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+                Start Sprint
+              </Button>
+            )}
             {sprint.status === 'ACTIVE' && (
               <Button size="sm" variant="outline" onClick={() => setCloseOpen(true)}>
                 Close Sprint
@@ -166,55 +322,38 @@ export function SprintBoard({
         />
       </div>
 
-      <div className="flex flex-1 gap-6 overflow-auto p-6">
-        {/* Kanban columns */}
-        <div className="flex flex-1 gap-4">
-          {groupedIssues.map((col) => (
-            <div key={col.key} className="flex w-72 shrink-0 flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <div className={cn('size-2.5 rounded-full', col.color)} />
-                <span className="text-sm font-medium">{col.label}</span>
-                <span className="text-muted-foreground text-xs">{col.issues.length}</span>
-              </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="flex flex-1 gap-6 overflow-auto p-6">
+          <div className="flex flex-1 gap-4">
+            {columns.map((col) => (
+              <KanbanColumn
+                key={col.key}
+                column={col}
+                onIssueClick={setSlideOverIssueId}
+                onCreateIssue={() => {}}
+              />
+            ))}
+          </div>
 
-              <div className="flex flex-col gap-2">
-                {col.issues.map((issue) => (
-                  <div
-                    key={issue.id}
-                    className="hover:bg-muted/50 cursor-pointer rounded-lg border bg-white p-3 transition-colors"
-                    onClick={() => setSlideOverIssueId(issue.id)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <IssueIdentifier identifier={issue.identifier} />
-                      {issue.assignee && (
-                        <Avatar className="ml-auto size-5">
-                          <AvatarImage src={issue.assignee.avatarUrl ?? ''} />
-                          <AvatarFallback className="text-[9px]">
-                            {issue.assignee.name?.charAt(0) ?? 'U'}
-                          </AvatarFallback>
-                        </Avatar>
-                      )}
-                    </div>
-                    <p className="mt-1 line-clamp-2 text-sm">{issue.title}</p>
-                  </div>
-                ))}
-                {col.issues.length === 0 && (
-                  <div className="text-muted-foreground rounded-lg border border-dashed p-6 text-center text-xs">
-                    No issues
-                  </div>
-                )}
-              </div>
+          {stats && stats.burndownData.length > 0 && (
+            <div className="w-80 shrink-0">
+              <SprintBurndown data={stats.burndownData} />
             </div>
-          ))}
+          )}
         </div>
 
-        {/* Burndown sidebar */}
-        {stats && stats.burndownData.length > 0 && (
-          <div className="w-80 shrink-0">
-            <SprintBurndown data={stats.burndownData} />
-          </div>
-        )}
-      </div>
+        <DragOverlay dropAnimation={dropAnimation}>
+          {activeIssue ? (
+            <KanbanCard issue={activeIssue as never} onClick={() => {}} isOverlay />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
       {/* Issue list section (compact) */}
       {issues.length > 0 && (

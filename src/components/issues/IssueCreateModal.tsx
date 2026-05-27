@@ -23,6 +23,7 @@ interface IssueCreateModalProps {
   workspaceId: string
   workspaceSlug: string
   defaultStatus?: string
+  sprintId?: string
   onCreated?: () => void
 }
 
@@ -33,6 +34,7 @@ export function IssueCreateModal({
   workspaceId,
   workspaceSlug,
   defaultStatus = 'TODO',
+  sprintId,
   onCreated,
 }: IssueCreateModalProps) {
   const router = useRouter()
@@ -109,6 +111,7 @@ export function IssueCreateModal({
       dueDate: dueDate?.toISOString(),
       labelIds: labelIds.length > 0 ? labelIds : undefined,
       description: description ?? undefined,
+      sprintId: sprintId ?? null,
     })
   }
 

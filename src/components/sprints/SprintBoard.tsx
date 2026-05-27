@@ -260,6 +260,7 @@ export function SprintBoard({
         projectId={projectId}
         workspaceId={workspaceId}
         workspaceSlug={workspaceSlug}
+        sprintId={sprintId}
         onCreated={() => {
           utils.sprint.getById.invalidate({ sprintId })
           utils.sprint.list.invalidate({ projectId })

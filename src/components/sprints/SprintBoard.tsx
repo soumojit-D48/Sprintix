@@ -199,47 +199,49 @@ export function SprintBoard({
   }
 
   function handleDragEnd(event: DragEndEvent) {
+    const originalStatus = activeIssue?.status
     setActiveIssue(null)
     const { active, over } = event
     if (!over) return
     const activeId = active.id as string
 
     setColumns((cols) => {
-      const activeColIndex = cols.findIndex((c) => c.issues.some((i) => i.id === activeId))
       let overColIndex = cols.findIndex((c) => c.issues.some((i) => i.id === over.id))
       if (overColIndex === -1) overColIndex = cols.findIndex((c) => c.key === over.id)
-      if (activeColIndex === -1 || overColIndex === -1) return cols
+      if (overColIndex === -1) return cols
+
+      const overCol = cols[overColIndex]
+      if (!overCol) return cols
+
+      if (originalStatus && originalStatus !== overCol.key) {
+        updateStatus.mutate({ issueId: activeId, status: overCol.key })
+        return cols
+      }
+
+      const activeColIndex = cols.findIndex((c) => c.issues.some((i) => i.id === activeId))
+      if (activeColIndex === -1) return cols
 
       const activeCol = cols[activeColIndex]
-      const overCol = cols[overColIndex]
-      if (!activeCol || !overCol) return cols
+      if (!activeCol) return cols
 
-      if (activeColIndex === overColIndex) {
-        const oldIndex = activeCol.issues.findIndex((i) => i.id === activeId)
-        let newIndex = overCol.issues.findIndex((i) => i.id === over.id)
-        if (newIndex === -1) newIndex = overCol.issues.length - 1
-        const newIssues = arrayMove(activeCol.issues, oldIndex, newIndex)
-        let newOrder = Date.now()
-        if (newIssues.length > 1) {
-          if (newIndex === 0) newOrder = (newIssues[1]?.order ?? Date.now()) - 1000
-          else if (newIndex === newIssues.length - 1) newOrder = (newIssues[newIndex - 1]?.order ?? Date.now()) + 1000
-          else {
-            const prev = newIssues[newIndex - 1]
-            const next = newIssues[newIndex + 1]
-            if (prev && next) newOrder = (prev.order + next.order) / 2
-          }
+      const oldIndex = activeCol.issues.findIndex((i) => i.id === activeId)
+      let newIndex = overCol.issues.findIndex((i) => i.id === over.id)
+      if (newIndex === -1) newIndex = overCol.issues.length - 1
+      const newIssues = arrayMove(activeCol.issues, oldIndex, newIndex)
+      let newOrder = Date.now()
+      if (newIssues.length > 1) {
+        if (newIndex === 0) newOrder = (newIssues[1]?.order ?? Date.now()) - 1000
+        else if (newIndex === newIssues.length - 1) newOrder = (newIssues[newIndex - 1]?.order ?? Date.now()) + 1000
+        else {
+          const prev = newIssues[newIndex - 1]
+          const next = newIssues[newIndex + 1]
+          if (prev && next) newOrder = (prev.order + next.order) / 2
         }
-        newIssues[newIndex] = { ...newIssues[newIndex], order: newOrder } as never
-        const newCols = [...cols]
-        newCols[activeColIndex] = { ...activeCol, issues: newIssues }
-        return newCols
       }
-
-      const movedIssue = activeCol.issues.find((i) => i.id === activeId)
-      if (movedIssue) {
-        updateStatus.mutate({ issueId: activeId, status: overCol.key })
-      }
-      return cols
+      newIssues[newIndex] = { ...newIssues[newIndex], order: newOrder } as never
+      const newCols = [...cols]
+      newCols[activeColIndex] = { ...activeCol, issues: newIssues }
+      return newCols
     })
   }
 

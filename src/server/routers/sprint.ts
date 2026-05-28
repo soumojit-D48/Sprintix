@@ -257,7 +257,9 @@ export const sprintRouter = router({
       return sprints.map((s) => {
         const totalIssues = s.issues.length
         const doneIssues = s.issues.filter((i) => i.status === 'DONE').length
-        const completionRate = totalIssues > 0 ? Math.round((doneIssues / totalIssues) * 100) : 0
+        const cancelledIssues = s.issues.filter((i) => i.status === 'CANCELLED').length
+        const activeIssues = totalIssues - cancelledIssues
+        const completionRate = activeIssues > 0 ? Math.round((doneIssues / activeIssues) * 100) : 0
 
         return {
           id: s.id,
@@ -302,7 +304,9 @@ export const sprintRouter = router({
     return sprints.map((s) => {
       const totalIssues = s.issues.length
       const doneIssues = s.issues.filter((i) => i.status === 'DONE').length
-      const completionRate = totalIssues > 0 ? Math.round((doneIssues / totalIssues) * 100) : 0
+      const cancelledIssues = s.issues.filter((i) => i.status === 'CANCELLED').length
+      const activeIssues = totalIssues - cancelledIssues
+      const completionRate = activeIssues > 0 ? Math.round((doneIssues / activeIssues) * 100) : 0
 
       return {
         id: s.id,
@@ -344,7 +348,9 @@ export const sprintRouter = router({
 
     const totalIssues = sprint.issues.length
     const doneIssues = sprint.issues.filter((i) => i.status === 'DONE').length
-    const completionRate = totalIssues > 0 ? Math.round((doneIssues / totalIssues) * 100) : 0
+    const cancelledIssues = sprint.issues.filter((i) => i.status === 'CANCELLED').length
+    const activeIssues = totalIssues - cancelledIssues
+    const completionRate = activeIssues > 0 ? Math.round((doneIssues / activeIssues) * 100) : 0
 
     return {
       ...sprint,
@@ -432,7 +438,8 @@ export const sprintRouter = router({
     const totalIssues = sprint.issues.length
     const doneIssues = sprint.issues.filter((i) => i.status === 'DONE').length
     const cancelledIssues = sprint.issues.filter((i) => i.status === 'CANCELLED').length
-    const completionRate = totalIssues > 0 ? Math.round((doneIssues / totalIssues) * 100) : 0
+    const activeIssues = totalIssues - cancelledIssues
+    const completionRate = activeIssues > 0 ? Math.round((doneIssues / activeIssues) * 100) : 0
 
     const sprintDays = Math.ceil(
       (sprint.endDate.getTime() - sprint.startDate.getTime()) / (1000 * 60 * 60 * 24)
@@ -449,7 +456,7 @@ export const sprintRouter = router({
     })
 
     const burndownData: { date: string; ideal: number; actual: number }[] = []
-    let remainingIssues = totalIssues
+    let remainingIssues = activeIssues
 
     for (let i = 0; i < sprintDays; i++) {
       const date = new Date(sprint.startDate)
@@ -466,7 +473,7 @@ export const sprintRouter = router({
       remainingIssues = Math.max(0, remainingIssues)
 
       const daysLeft = sprintDays - i - 1
-      const idealRemaining = daysLeft > 0 ? (totalIssues * daysLeft) / (sprintDays - 1) : 0
+      const idealRemaining = daysLeft > 0 ? (activeIssues * daysLeft) / (sprintDays - 1) : 0
 
       burndownData.push({
         date: dateStr,

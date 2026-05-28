@@ -574,6 +574,7 @@ export const issueRouter = router({
         sprintId: null,
         deletedAt: null,
         parentId: null,
+        status: { notIn: ['DONE', 'CANCELLED'] },
       }
 
       if (input.search) {

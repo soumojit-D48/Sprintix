@@ -3,6 +3,8 @@ import { redirect, notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { ProjectLayoutClient } from './project-layout-client'
 
+export const dynamic = 'force-dynamic'
+
 export default async function ProjectLayout({
   children,
   params,
@@ -15,36 +17,57 @@ export default async function ProjectLayout({
 
   const { workspaceSlug, projectId } = await params
 
-  const user = await prisma.user.findUnique({
-    where: { clerkId: userId },
-    select: { id: true },
-  })
+  let user
+  try {
+    user = await prisma.user.findUnique({
+      where: { clerkId: userId },
+      select: { id: true },
+    })
+  } catch (e) {
+    console.error('[ProjectLayout] Error fetching user:', e)
+    throw e
+  }
 
   if (!user) redirect('/sign-in')
 
-  const membership = await prisma.workspaceMember.findFirst({
-    where: {
-      userId: user.id,
-      workspace: { slug: workspaceSlug },
-    },
-    select: { id: true, role: true },
-  })
+  let membership
+  try {
+    membership = await prisma.workspaceMember.findFirst({
+      where: {
+        userId: user.id,
+        workspace: { slug: workspaceSlug },
+      },
+      select: { id: true, role: true },
+    })
+  } catch (e) {
+    console.error('[ProjectLayout] Error fetching membership:', e)
+    throw e
+  }
 
   if (!membership) redirect(`/${workspaceSlug}`)
 
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: {
-      id: true,
-      name: true,
-      identifier: true,
-      color: true,
-      status: true,
-      leadId: true,
-    },
-  })
+  let project
+  try {
+    project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        name: true,
+        identifier: true,
+        color: true,
+        status: true,
+        leadId: true,
+      },
+    })
+  } catch (e) {
+    console.error('[ProjectLayout] Error fetching project:', e)
+    throw e
+  }
 
-  if (!project) notFound()
+  if (!project) {
+    console.error(`[ProjectLayout] Project not found for id: ${projectId} in workspace: ${workspaceSlug}`)
+    notFound()
+  }
 
   const [activeSprints] = await Promise.all([
     prisma.sprint.findMany({

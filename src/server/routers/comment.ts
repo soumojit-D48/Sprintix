@@ -3,6 +3,7 @@ import { router, protectedProcedure } from '../trpc'
 import { prisma } from '@/lib/prisma'
 import { TRPCError } from '@trpc/server'
 import { triggerEvent } from '@/lib/pusher'
+import { notifyMentioned, notifyCommented } from '@/lib/notifications'
 import {
   createCommentSchema,
   updateCommentSchema,
@@ -43,7 +44,15 @@ export const commentRouter = router({
   create: protectedProcedure.input(createCommentSchema).mutation(async ({ ctx, input }) => {
     const issue = await prisma.issue.findUnique({
       where: { id: input.issueId },
-      include: { project: { select: { workspaceId: true } } },
+      select: {
+        id: true,
+        identifier: true,
+        title: true,
+        assigneeId: true,
+        reporterId: true,
+        deletedAt: true,
+        project: { select: { workspaceId: true } },
+      },
     })
     if (!issue || issue.deletedAt) throw new TRPCError({ code: 'NOT_FOUND', message: 'Issue not found' })
 
@@ -52,7 +61,7 @@ export const commentRouter = router({
 
     const user = await prisma.user.findUnique({
       where: { clerkId: ctx.userId! },
-      select: { id: true },
+      select: { id: true, name: true },
     })
     if (!user) throw new TRPCError({ code: 'UNAUTHORIZED' })
 
@@ -79,25 +88,50 @@ export const commentRouter = router({
         user.id,
       )
 
-      const mentionedIds = extractMentionsFromTiptap(input.body)
-      if (mentionedIds.length > 0) {
-        const notifications = mentionedIds
-          .filter((id) => id !== user.id)
-          .map((mentionedUserId) => ({
-            userId: mentionedUserId,
-            type: 'MENTIONED' as const,
-            title: 'You were mentioned',
-            body: `Mentioned in a comment on an issue`,
-            entityId: created.id,
-            entityType: 'comment',
-          }))
-        if (notifications.length > 0) {
-          await tx.notification.createMany({ data: notifications })
-        }
-      }
-
       return created
     })
+
+    // Process notifications outside transaction
+    const mentionedIds = extractMentionsFromTiptap(input.body)
+    const filteredMentionedIds = mentionedIds.filter((id) => id !== user.id)
+
+    if (filteredMentionedIds.length > 0) {
+      await notifyMentioned(
+        {
+          id: comment.id,
+          issueId: issue.id,
+          issueIdentifier: issue.identifier,
+          type: 'comment',
+        },
+        filteredMentionedIds,
+        user.name
+      )
+    }
+
+    // Notify assignee and reporter of comment (excluding commenter and anyone already notified via mention)
+    const mentionedSet = new Set(filteredMentionedIds)
+    const recipients = new Set<string>()
+    if (issue.assigneeId && issue.assigneeId !== user.id && !mentionedSet.has(issue.assigneeId)) {
+      recipients.add(issue.assigneeId)
+    }
+    if (issue.reporterId && issue.reporterId !== user.id && !mentionedSet.has(issue.reporterId)) {
+      recipients.add(issue.reporterId)
+    }
+
+    if (recipients.size > 0) {
+      await notifyCommented(
+        {
+          id: comment.id,
+          issueId: issue.id,
+          issueIdentifier: issue.identifier,
+          issueTitle: issue.title,
+        },
+        issue.assigneeId,
+        issue.reporterId,
+        user.id,
+        user.name
+      )
+    }
 
     await triggerEvent(`private-workspace-${issue.project.workspaceId}`, 'comment:created', {
       issueId: input.issueId,

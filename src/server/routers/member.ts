@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { router, protectedProcedure } from '../trpc'
 import { prisma } from '@/lib/prisma'
 import { TRPCError } from '@trpc/server'
+import { notifyInvited } from '@/lib/notifications'
 
 export const memberRouter = router({
   list: protectedProcedure
@@ -110,6 +111,24 @@ export const memberRouter = router({
           })
         )
       )
+
+      // Send notifications for users who already have accounts
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: input.workspaceId },
+        select: { name: true },
+      })
+
+      const inviter = await prisma.user.findUnique({
+        where: { clerkId: ctx.userId! },
+        select: { name: true },
+      })
+
+      for (const invite of invites) {
+        await notifyInvited(
+          { id: invite.id, email: invite.email, workspaceName: workspace?.name || 'Workspace' },
+          inviter?.name || 'Someone'
+        )
+      }
 
       // TODO: Send invitation email via Resend
 

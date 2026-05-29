@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { TRPCError } from '@trpc/server'
 import { triggerEvent } from '@/lib/pusher'
 import { extractMentionsFromTiptap } from '@/lib/mentions'
+import { notifyMentioned } from '@/lib/notifications'
 import {
   sendMessageSchema,
   editMessageSchema,
@@ -97,25 +98,23 @@ export const messageRouter = router({
         include: messageIncludes,
       })
 
-      const mentionedIds = extractMentionsFromTiptap(input.body)
-      if (mentionedIds.length > 0) {
-        const notifications = mentionedIds
-          .filter((id) => id !== user.id)
-          .map((mentionedUserId) => ({
-            userId: mentionedUserId,
-            type: 'MENTIONED' as const,
-            title: 'You were mentioned',
-            body: `Mentioned in a message`,
-            entityId: created.id,
-            entityType: 'message',
-          }))
-        if (notifications.length > 0) {
-          await tx.notification.createMany({ data: notifications })
-        }
-      }
-
       return created
     })
+
+    // Process notifications outside transaction
+    const mentionedIds = extractMentionsFromTiptap(input.body)
+    const filteredMentionedIds = mentionedIds.filter((id) => id !== user.id)
+
+    if (filteredMentionedIds.length > 0) {
+      await notifyMentioned(
+        {
+          id: message.id,
+          type: 'message',
+        },
+        filteredMentionedIds,
+        user.name
+      )
+    }
 
     await triggerEvent(`private-workspace-${workspaceId}`, 'message:created', {
       channelId: input.channelId,

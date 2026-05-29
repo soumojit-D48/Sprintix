@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { TRPCError } from '@trpc/server'
 import { triggerEvent } from '@/lib/pusher'
 import { createActivityLog } from '@/lib/activity-log'
+import { notifyAssigned } from '@/lib/notifications'
 import {
   createIssueSchema,
   updateIssueSchema,
@@ -343,6 +344,20 @@ export const issueRouter = router({
       { from: existing.assigneeId, to: input.assigneeId },
       member.userId
     )
+
+    // Send notification
+    const actor = await prisma.user.findUnique({
+      where: { clerkId: ctx.userId! },
+      select: { name: true },
+    })
+
+    if (issue.assigneeId && issue.assigneeId !== member.userId) {
+      await notifyAssigned(
+        { id: issue.id, identifier: issue.identifier, title: issue.title },
+        issue.assigneeId,
+        actor?.name || 'Someone'
+      )
+    }
 
     await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:updated', { issueId: issue.id, projectId: issue.projectId })
 

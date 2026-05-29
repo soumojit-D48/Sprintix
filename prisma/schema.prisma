@@ -14,20 +14,21 @@ datasource db {
 //  Users 
 
 model User {
-  id               String            @id @default(cuid())
-  clerkId          String            @unique
-  email            String            @unique
-  name             String
-  avatarUrl        String?
-  createdAt        DateTime          @default(now())
-  workspaceMembers WorkspaceMember[]
-  assignedIssues   Issue[]           @relation("AssignedIssues")
-  reportedIssues   Issue[]           @relation("ReportedIssues")
-  comments         Comment[]
-  notifications    Notification[]
-  sentMessages     Message[]
-  activityLogs     ActivityLog[]
-  channelMembers   ChannelMember[]
+  id                      String            @id @default(cuid())
+  clerkId                 String            @unique
+  email                   String            @unique
+  name                    String
+  avatarUrl               String?
+  notificationPreferences Json              @default("{}")
+  createdAt               DateTime          @default(now())
+  workspaceMembers        WorkspaceMember[]
+  assignedIssues          Issue[]           @relation("AssignedIssues")
+  reportedIssues          Issue[]           @relation("ReportedIssues")
+  comments                Comment[]
+  notifications           Notification[]
+  sentMessages            Message[]
+  activityLogs            ActivityLog[]
+  channelMembers          ChannelMember[]
 }
 
 //  Workspaces 

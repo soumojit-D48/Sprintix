@@ -18,6 +18,20 @@ export async function POST(req: NextRequest) {
       return new NextResponse('Missing required fields', { status: 400 })
     }
 
+    // Authorize private user channel for real-time notifications
+    if (channel.startsWith('private-user-')) {
+      const dbUserId = channel.replace('private-user-', '')
+      const user = await prisma.user.findUnique({
+        where: { clerkId: userId },
+        select: { id: true },
+      })
+      if (!user || user.id !== dbUserId) {
+        return new NextResponse('Forbidden', { status: 403 })
+      }
+      const authResponse = pusherServer.authorizeChannel(socketId, channel)
+      return NextResponse.json(authResponse)
+    }
+
     // Extract workspaceId from channel name (format: private-workspace-{workspaceId} or presence-workspace-{workspaceId})
     const isPrivate = channel.startsWith('private-workspace-')
     const isPresence = channel.startsWith('presence-workspace-')

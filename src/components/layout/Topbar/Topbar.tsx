@@ -7,6 +7,7 @@ import { Search, Bell, Menu, Command, ChevronRight, Home } from 'lucide-react'
 import { useUIStore } from '@/stores/ui-store'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { NotificationBell } from '../NotificationBell'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -100,21 +101,7 @@ export function Topbar({ workspaceName, projectName }: TopbarProps) {
           </TooltipContent>
         </Tooltip>
 
-        <Tooltip>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative size-8">
-                <Bell className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
-              <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <div className="text-muted-foreground p-4 text-center text-sm">No notifications</div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <TooltipContent>Notifications</TooltipContent>
-        </Tooltip>
+        <NotificationBell />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

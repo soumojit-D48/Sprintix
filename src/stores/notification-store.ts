@@ -8,6 +8,9 @@ interface NotificationState {
     title: string
     message: string
     read: boolean
+    type: string
+    entityId: string | null
+    entityType: string | null
     createdAt: Date
   }[]
   unreadCount: number

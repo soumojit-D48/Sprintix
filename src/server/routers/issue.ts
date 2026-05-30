@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { TRPCError } from '@trpc/server'
 import { triggerEvent } from '@/lib/pusher'
 import { createActivityLog } from '@/lib/activity-log'
-import { notifyAssigned } from '@/lib/notifications'
+import { notifyAssigned, notifyStatusChanged } from '@/lib/notifications'
 import {
   createIssueSchema,
   updateIssueSchema,
@@ -157,6 +157,20 @@ export const issueRouter = router({
 
     await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:updated', { issueId: issue.id, projectId: issue.projectId })
 
+    if (changes.status && issue.assignee?.id && issue.assignee.id !== member.userId) {
+      const actor = await prisma.user.findUnique({
+        where: { clerkId: ctx.userId! },
+        select: { name: true },
+      })
+      await notifyStatusChanged(
+        { id: issue.id, identifier: issue.identifier, title: issue.title },
+        String(changes.status.from),
+        String(changes.status.to),
+        issue.assignee.id,
+        actor?.name || 'Someone'
+      )
+    }
+
     return issue
   }),
 
@@ -291,6 +305,20 @@ export const issueRouter = router({
 
     await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:updated', { issueId: issue.id, projectId: issue.projectId })
 
+    if (existing.status !== input.status && issue.assignee?.id && issue.assignee.id !== member.userId) {
+      const actor = await prisma.user.findUnique({
+        where: { clerkId: ctx.userId! },
+        select: { name: true },
+      })
+      await notifyStatusChanged(
+        { id: issue.id, identifier: issue.identifier, title: issue.title },
+        existing.status,
+        input.status,
+        issue.assignee.id,
+        actor?.name || 'Someone'
+      )
+    }
+
     return issue
   }),
 
@@ -324,10 +352,10 @@ export const issueRouter = router({
         member.userId
       )
 
-      await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:updated', { issueId: issue.id, projectId: issue.projectId })
+    await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:updated', { issueId: issue.id, projectId: issue.projectId })
 
-      return issue
-    }),
+    return issue
+  }),
 
   assign: protectedProcedure.input(assignIssueSchema).mutation(async ({ ctx, input }) => {
     const existing = await prisma.issue.findUnique({

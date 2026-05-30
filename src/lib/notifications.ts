@@ -147,3 +147,29 @@ export async function notifyMessageReceived(
     entityType: 'message',
   })
 }
+
+function formatStatus(status: string): string {
+  return status
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+export async function notifyStatusChanged(
+  issue: { id: string; identifier: string; title: string },
+  oldStatus: string,
+  newStatus: string,
+  assigneeId: string | null,
+  actorName: string
+) {
+  if (!assigneeId) return null
+
+  return createNotification({
+    userId: assigneeId,
+    type: NotificationType.STATUS_CHANGED,
+    title: `${issue.identifier} moved to ${formatStatus(newStatus)}`,
+    body: `${actorName} changed ${issue.title} from ${formatStatus(oldStatus)} to ${formatStatus(newStatus)}`,
+    entityId: issue.id,
+    entityType: 'issue',
+  })
+}

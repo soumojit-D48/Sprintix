@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { TRPCError } from '@trpc/server'
 import { triggerEvent } from '@/lib/pusher'
 import { extractMentionsFromTiptap } from '@/lib/mentions'
-import { notifyMentioned } from '@/lib/notifications'
+import { notifyMentioned, notifyMessageReceived } from '@/lib/notifications'
 import {
   sendMessageSchema,
   editMessageSchema,
@@ -15,6 +15,21 @@ import {
   searchMessagesSchema,
   getThreadSchema,
 } from '@/lib/validations/message'
+
+function extractPlainText(body: Record<string, unknown>): string {
+  const content = (body as any)?.content
+  if (!content || !Array.isArray(content)) return ''
+  return content
+    .map((node: any) => {
+      if (node.type === 'paragraph' && node.content) {
+        return node.content.map((n: any) => n.text || '').join('')
+      }
+      return ''
+    })
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 200)
+}
 
 async function getUser(prisma: any, clerkId: string) {
   const user = await prisma.user.findUnique({
@@ -114,6 +129,23 @@ export const messageRouter = router({
         filteredMentionedIds,
         user.name
       )
+    }
+
+    // Notify DM recipient
+    const channel = await prisma.channel.findUnique({
+      where: { id: input.channelId },
+      select: { type: true, members: { select: { userId: true } } },
+    })
+    if (channel?.type === 'DM') {
+      const otherMemberId = channel.members.find((m) => m.userId !== user.id)?.userId
+      if (otherMemberId && !filteredMentionedIds.includes(otherMemberId)) {
+        const bodyText = extractPlainText(input.body)
+        await notifyMessageReceived(
+          { id: message.id, senderId: user.id, body: bodyText },
+          otherMemberId,
+          user.name || 'Someone'
+        )
+      }
     }
 
     await triggerEvent(`private-workspace-${workspaceId}`, 'message:created', {

@@ -20,20 +20,28 @@ import {
 interface MessageInputProps {
   channelId: string
   workspaceId: string
+  channelType?: string
   currentUserId?: string
 }
 
 const EMOJI_LIST = ['👍', '❤️', '😂', '🎉', '🚀', '👀', '🔥', '✅']
 
-export function MessageInput({ channelId, workspaceId, currentUserId }: MessageInputProps) {
+export function MessageInput({ channelId, workspaceId, channelType, currentUserId }: MessageInputProps) {
   const utils = trpc.useUtils()
   const { handleTyping } = useTypingIndicator(channelId)
   const editingMessage = useChatStore((s) => s.editingMessage)
   const clearEditingMessage = useChatStore((s) => s.clearEditingMessage)
 
+  const isDM = channelType === 'DM'
+
+  const { data: channelMembers } = trpc.channel.getMembers.useQuery(
+    { channelId },
+    { enabled: !!channelId && isDM }
+  )
+
   const { data: workspaceMembers } = trpc.member.list.useQuery(
     { workspaceId },
-    { enabled: !!workspaceId }
+    { enabled: !!workspaceId && !isDM }
   )
 
   const isEditing = editingMessage?.channelId === channelId
@@ -72,8 +80,10 @@ export function MessageInput({ channelId, workspaceId, currentUserId }: MessageI
     },
   })
 
+  const members = isDM ? channelMembers : workspaceMembers
+
   const mentionItems =
-    workspaceMembers?.map((m: any) => ({
+    members?.map((m: any) => ({
       id: m.user.id,
       name: m.user.name,
       avatarUrl: m.user.avatarUrl,

@@ -77,7 +77,7 @@ export function ChatLayout({ currentUserId }: { currentUserId: string }) {
               )}
             </div>
             <MessageArea channelId={channel.id} currentUserId={currentUserId} />
-            <MessageInput channelId={channel.id} workspaceId={workspace.id} currentUserId={currentUserId} />
+            <MessageInput channelId={channel.id} workspaceId={workspace.id} channelType={channel.type} currentUserId={currentUserId} />
           </>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3">

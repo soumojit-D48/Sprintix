@@ -15,6 +15,8 @@ import { IssueAssigneeSelect } from './IssueAssigneeSelect'
 import { IssueDueDatePicker } from './IssueDueDatePicker'
 import { IssueLabelSelect } from './IssueLabelSelect'
 import { RichTextEditor } from '@/components/editor/RichTextEditor'
+import { AssigneeSuggestion } from '@/components/ai/AssigneeSuggestion'
+import { LabelSuggestion } from '@/components/ai/LabelSuggestion'
 
 interface IssueCreateModalProps {
   open: boolean
@@ -148,6 +150,14 @@ export function IssueCreateModal({
                 onChange={setAssigneeId}
                 members={members ?? []}
               />
+              <AssigneeSuggestion
+                projectId={projectId}
+                title={title}
+                description={description}
+                onSelect={setAssigneeId}
+                currentAssigneeId={assigneeId}
+                members={members ?? []}
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-muted-foreground text-xs">Due Date</Label>
@@ -167,6 +177,17 @@ export function IssueCreateModal({
               }
               onCreateLabel={handleCreateLabel}
               onDeleteLabel={handleDeleteLabel}
+            />
+            <LabelSuggestion
+              workspaceId={workspaceId}
+              issueTitle={title}
+              issueDescription={description}
+              onToggle={(id) =>
+                setLabelIds((prev) =>
+                  prev.includes(id) ? prev.filter((l) => l !== id) : [...prev, id]
+                )
+              }
+              selectedIds={labelIds}
             />
           </div>
 

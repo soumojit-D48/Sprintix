@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -19,19 +19,21 @@ import {
 
 interface MessageInputProps {
   channelId: string
+  workspaceId: string
+  currentUserId?: string
 }
 
 const EMOJI_LIST = ['👍', '❤️', '😂', '🎉', '🚀', '👀', '🔥', '✅']
 
-export function MessageInput({ channelId }: MessageInputProps) {
+export function MessageInput({ channelId, workspaceId, currentUserId }: MessageInputProps) {
   const utils = trpc.useUtils()
   const { handleTyping } = useTypingIndicator(channelId)
   const editingMessage = useChatStore((s) => s.editingMessage)
   const clearEditingMessage = useChatStore((s) => s.clearEditingMessage)
 
-  const { data: members } = trpc.channel.getMembers.useQuery(
-    { channelId },
-    { enabled: !!channelId }
+  const { data: workspaceMembers } = trpc.member.list.useQuery(
+    { workspaceId },
+    { enabled: !!workspaceId }
   )
 
   const isEditing = editingMessage?.channelId === channelId
@@ -71,13 +73,16 @@ export function MessageInput({ channelId }: MessageInputProps) {
   })
 
   const mentionItems =
-    members?.map((m: any) => ({
+    workspaceMembers?.map((m: any) => ({
       id: m.user.id,
       name: m.user.name,
       avatarUrl: m.user.avatarUrl,
     })) ?? []
 
-  function renderMentionList() {
+  const mentionItemsRef = useRef(mentionItems)
+  mentionItemsRef.current = mentionItems
+
+  function renderMentionList(currentUserId?: string) {
     let popup: { element: HTMLElement; destroy: () => void } | null = null
 
     const createDropdown = (
@@ -90,7 +95,8 @@ export function MessageInput({ channelId }: MessageInputProps) {
         'border border-border bg-popover z-50 max-h-48 w-56 overflow-auto rounded-md border p-1 shadow-md'
       container.style.position = 'fixed'
       container.style.left = `${rect.left}px`
-      container.style.top = `${rect.bottom + 4}px`
+      container.style.visibility = 'hidden'
+      container.style.pointerEvents = 'none'
 
       items.forEach((item, index) => {
         const btn = document.createElement('button')
@@ -98,7 +104,11 @@ export function MessageInput({ channelId }: MessageInputProps) {
         btn.className = `flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors ${
           index === 0 ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'
         }`
-        btn.innerHTML = `<span class="font-medium">${item.name}</span>`
+        const avatarHtml = item.avatarUrl
+          ? `<img src="${item.avatarUrl}" alt="" class="size-5 rounded-full object-cover" />`
+          : `<span class="flex size-5 items-center justify-center rounded-full bg-muted text-[10px] font-medium">${item.name.charAt(0)}</span>`
+        const isYou = item.id === currentUserId
+        btn.innerHTML = `${avatarHtml}<span class="font-medium">${item.name}</span>${isYou ? '<span class="ml-auto text-[10px] text-muted-foreground">(you)</span>' : ''}`
         btn.onmousedown = (e) => e.preventDefault()
         btn.onclick = () => {
           command({ id: item.id, label: item.name })
@@ -107,6 +117,18 @@ export function MessageInput({ channelId }: MessageInputProps) {
         container.appendChild(btn)
       })
 
+      document.body.appendChild(container)
+      const height = container.getBoundingClientRect().height
+      container.remove()
+      container.style.visibility = ''
+      container.style.pointerEvents = ''
+
+      const spaceBelow = window.innerHeight - rect.bottom
+      if (spaceBelow >= height) {
+        container.style.top = `${rect.bottom + 4}px`
+      } else {
+        container.style.top = `${Math.max(4, rect.top - height - 4)}px`
+      }
       document.body.appendChild(container)
       popup = { element: container, destroy: () => container.remove() }
       return popup
@@ -154,10 +176,10 @@ export function MessageInput({ channelId }: MessageInputProps) {
         suggestion: {
           char: '@',
           items: ({ query }: { query: string }) =>
-            mentionItems
+            mentionItemsRef.current
               .filter((m) => m.name.toLowerCase().includes(query.toLowerCase()))
               .slice(0, 10),
-          render: renderMentionList as any,
+          render: () => renderMentionList(currentUserId) as any,
         },
       }),
     ],

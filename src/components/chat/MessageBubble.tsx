@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import Mention from '@tiptap/extension-mention'
 import {
   MessageSquare,
   MoreHorizontal,
@@ -247,7 +248,12 @@ export function MessageBubble({ message, isFirstInGroup, workspaceSlug, currentU
 function MessageRenderer({ content }: { content: any }) {
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [StarterKit],
+    extensions: [
+      StarterKit,
+      Mention.configure({
+        HTMLAttributes: { class: 'mention' },
+      }),
+    ],
     content: content ?? '',
     editable: false,
     editorProps: { attributes: { class: 'prose prose-sm max-w-none focus:outline-none' } },

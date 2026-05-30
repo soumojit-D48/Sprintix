@@ -128,3 +128,7 @@
     @apply font-sans;
   }
 }
+
+.mention {
+  @apply inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-sm font-medium text-primary;
+}

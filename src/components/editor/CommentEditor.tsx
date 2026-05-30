@@ -1,6 +1,7 @@
 'use client'
 
 import { useEditor, EditorContent } from '@tiptap/react'
+import { useRef } from 'react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
@@ -33,7 +34,8 @@ function renderMentionList(currentUserId: string | undefined) {
     container.className = 'border border-border bg-popover z-50 max-h-48 w-56 overflow-auto rounded-md border p-1 shadow-md'
     container.style.position = 'fixed'
     container.style.left = `${rect.left}px`
-    container.style.top = `${rect.bottom + 4}px`
+    container.style.visibility = 'hidden'
+    container.style.pointerEvents = 'none'
 
     items.forEach((item, index) => {
       const btn = document.createElement('button')
@@ -52,6 +54,18 @@ function renderMentionList(currentUserId: string | undefined) {
       container.appendChild(btn)
     })
 
+    document.body.appendChild(container)
+    const height = container.getBoundingClientRect().height
+    container.remove()
+    container.style.visibility = ''
+    container.style.pointerEvents = ''
+
+    const spaceBelow = window.innerHeight - rect.bottom
+    if (spaceBelow >= height) {
+      container.style.top = `${rect.bottom + 4}px`
+    } else {
+      container.style.top = `${Math.max(4, rect.top - height - 4)}px`
+    }
     document.body.appendChild(container)
     popup = { element: container, destroy: () => container.remove() }
     return popup
@@ -92,6 +106,9 @@ export function CommentEditor({
   members = [],
   currentUserId,
 }: CommentEditorProps) {
+  const membersRef = useRef(members)
+  membersRef.current = members
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -104,7 +121,7 @@ export function CommentEditor({
         suggestion: {
           char: '@',
           items: ({ query }: { query: string }) =>
-            members
+            membersRef.current
               .filter((m) => m.name.toLowerCase().includes(query.toLowerCase()))
               .slice(0, 10),
           render: () => renderMentionList(currentUserId) as any,

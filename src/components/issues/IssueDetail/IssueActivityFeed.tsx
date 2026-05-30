@@ -271,6 +271,7 @@ export function IssueActivityFeed({ issueId, workspaceId, currentUserId }: Issue
                 onChange={setNewComment}
                 placeholder="Add a comment..."
                 members={memberList}
+                currentUserId={currentUserId}
               />
               <Button
                 size="sm"
@@ -330,6 +331,7 @@ export function IssueActivityFeed({ issueId, workspaceId, currentUserId }: Issue
                 onChange={setNewComment}
                 placeholder="Add a comment..."
                 members={memberList}
+                currentUserId={currentUserId}
               />
               <Button
                 size="sm"
@@ -509,6 +511,7 @@ function CommentThread({
                 onChange={setReplyBody}
                 placeholder="Write a reply..."
                 members={members}
+                currentUserId={currentUserId}
               />
               <div className="flex gap-2">
                 <Button

@@ -18,9 +18,10 @@ interface CommentEditorProps {
   placeholder?: string
   minHeight?: string
   members?: MentionItem[]
+  currentUserId: string | undefined
 }
 
-function renderMentionList() {
+function renderMentionList(currentUserId: string | undefined) {
   let popup: { element: HTMLElement; destroy: () => void } | null = null
 
   const createDropdown = (
@@ -41,7 +42,8 @@ function renderMentionList() {
       const avatarHtml = item.avatarUrl
         ? `<img src="${item.avatarUrl}" alt="" class="size-5 rounded-full object-cover" />`
         : `<span class="flex size-5 items-center justify-center rounded-full bg-muted text-[10px] font-medium">${item.name.charAt(0)}</span>`
-      btn.innerHTML = `${avatarHtml}<span class="font-medium">${item.name}</span>`
+      const isYou = item.id === currentUserId
+      btn.innerHTML = `${avatarHtml}<span class="font-medium">${item.name}</span>${isYou ? '<span class="ml-auto text-[10px] text-muted-foreground">(you)</span>' : ''}`
       btn.onmousedown = (e) => e.preventDefault()
       btn.onclick = () => {
         command({ id: item.id, label: item.name })
@@ -88,6 +90,7 @@ export function CommentEditor({
   placeholder = 'Add a comment...',
   minHeight = '80px',
   members = [],
+  currentUserId,
 }: CommentEditorProps) {
   const editor = useEditor({
     immediatelyRender: false,
@@ -104,7 +107,7 @@ export function CommentEditor({
             members
               .filter((m) => m.name.toLowerCase().includes(query.toLowerCase()))
               .slice(0, 10),
-          render: renderMentionList as any,
+          render: () => renderMentionList(currentUserId) as any,
         },
       }),
     ],

@@ -71,6 +71,18 @@ export const issueRouter = router({
 
     await createActivityLog(prisma, issue.id, 'issue', 'created', { title: input.title }, member.userId)
 
+    if (input.assigneeId && input.assigneeId !== member.userId) {
+      const actor = await prisma.user.findUnique({
+        where: { clerkId: ctx.userId! },
+        select: { name: true },
+      })
+      await notifyAssigned(
+        { id: issue.id, identifier: issue.identifier, title: issue.title },
+        input.assigneeId,
+        actor?.name || 'Someone'
+      )
+    }
+
     await triggerEvent(`private-workspace-${workspaceId}`, 'issue:created', { issueId: issue.id, projectId: issue.projectId })
 
     return issue

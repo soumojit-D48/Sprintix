@@ -19,6 +19,7 @@ import { IssueLabelSelect } from '@/components/issues/IssueLabelSelect'
 import { IssueIdentifier } from '@/components/issues/IssueIdentifier'
 import { IssueSubIssues } from '@/components/issues/IssueSubIssues'
 import { IssueActivityFeed } from '@/components/issues/IssueDetail/IssueActivityFeed'
+import { IssueSummarizer } from '@/components/ai/IssueSummarizer'
 import { cn } from '@/lib/utils'
 
 export default function IssueDetailPage() {
@@ -212,6 +213,11 @@ export default function IssueDetailPage() {
                 projectId={issue.projectId}
                 workspaceSlug={workspaceSlug}
               />
+
+              <Separator />
+
+              {/* AI Summary */}
+              <IssueSummarizer issueId={issue.id} />
 
               <Separator />
 

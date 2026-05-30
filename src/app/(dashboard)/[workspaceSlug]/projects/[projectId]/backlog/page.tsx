@@ -23,6 +23,7 @@ import { IssueIdentifier } from '@/components/issues/IssueIdentifier'
 import { IssueCreateModal } from '@/components/issues/IssueCreateModal'
 import { IssueSlideOver } from '@/components/issues/IssueSlideOver'
 import { SprintCreateModal } from '@/components/sprints/SprintCreateModal'
+import { SprintPlanner } from '@/components/ai/SprintPlanner'
 import { SprintProgress } from '@/components/sprints/SprintProgress'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -53,6 +54,7 @@ export default function BacklogPage() {
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [sprintCreateOpen, setSprintCreateOpen] = useState(false)
+  const [planSprintOpen, setPlanSprintOpen] = useState(false)
   const [slideOverIssueId, setSlideOverIssueId] = useState<string | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
@@ -148,10 +150,31 @@ export default function BacklogPage() {
               className="h-8 w-52 pl-8 text-sm"
             />
           </div>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="mr-1.5 size-4" />
             Add Issue
           </Button>
+          <SprintPlanner
+            projectId={projectId}
+            workspaceSlug={workspaceSlug}
+            open={planSprintOpen}
+            onOpenChange={setPlanSprintOpen}
+            onAcceptSuggestion={(issueIds) => {
+              if (plannedSprint) {
+                addIssueToSprint.mutate({ sprintId: plannedSprint.id, issueIds })
+              } else if (activeSprint) {
+                addIssueToSprint.mutate({ sprintId: activeSprint.id, issueIds })
+              }
+              setPlanSprintOpen(false)
+            }}
+            backlogIssues={backlogIssues.map((i) => ({
+              id: i.id,
+              identifier: i.identifier,
+              title: i.title,
+              priority: i.priority,
+              assignee: i.assignee ? { name: i.assignee.name } : null,
+            }))}
+          />
         </div>
       </div>
 

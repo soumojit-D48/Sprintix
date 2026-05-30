@@ -2,19 +2,22 @@
 
 import { create } from 'zustand'
 
+interface NotificationItem {
+  id: string
+  title: string
+  message: string
+  read: boolean
+  type: string
+  entityId: string | null
+  entityType: string | null
+  createdAt: Date
+}
+
 interface NotificationState {
-  notifications: {
-    id: string
-    title: string
-    message: string
-    read: boolean
-    type: string
-    entityId: string | null
-    entityType: string | null
-    createdAt: Date
-  }[]
+  notifications: NotificationItem[]
   unreadCount: number
-  setNotifications: (notifications: NotificationState['notifications']) => void
+  setNotifications: (notifications: NotificationItem[]) => void
+  addNotification: (notification: NotificationItem) => void
   markAsRead: (id: string) => void
   markAllAsRead: () => void
 }
@@ -27,6 +30,11 @@ export const useNotificationStore = create<NotificationState>((set) => ({
       notifications,
       unreadCount: notifications.filter((n) => !n.read).length,
     }),
+  addNotification: (notification) =>
+    set((state) => ({
+      notifications: [notification, ...state.notifications],
+      unreadCount: state.unreadCount + (notification.read ? 0 : 1),
+    })),
   markAsRead: (id) =>
     set((state) => ({
       notifications: state.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)),

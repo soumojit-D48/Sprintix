@@ -11,6 +11,7 @@ export function useNotificationRealtime() {
   const utils = trpc.useUtils()
   const { userId } = useCurrentMember()
   const setNotifications = useNotificationStore((s) => s.setNotifications)
+  const addNotification = useNotificationStore((s) => s.addNotification)
 
   // Fetch initial notifications list
   const { data: listData } = trpc.notification.list.useQuery(
@@ -57,7 +58,19 @@ export function useNotificationRealtime() {
         description: notification.body,
       })
 
-      // Invalidate queries to trigger re-fetch and update Zustand
+      // Optimistic +1 update
+      addNotification({
+        id: notification.id,
+        title: notification.title,
+        message: notification.body || '',
+        read: notification.read,
+        type: notification.type,
+        entityId: notification.entityId,
+        entityType: notification.entityType,
+        createdAt: new Date(notification.createdAt),
+      })
+
+      // Background sync for consistency
       utils.notification.getUnreadCount.invalidate()
       utils.notification.list.invalidate()
     })

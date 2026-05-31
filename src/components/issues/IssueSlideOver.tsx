@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Trash2, ExternalLink, MessageSquare } from 'lucide-react'
+import { Loader2, Trash2, ExternalLink } from 'lucide-react'
 import { trpc } from '@/lib/trpc/provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,6 +19,7 @@ import { IssueDueDatePicker } from './IssueDueDatePicker'
 import { IssueLabelSelect } from './IssueLabelSelect'
 import { IssueIdentifier } from './IssueIdentifier'
 import { IssueSubIssues } from './IssueSubIssues'
+import { IssueActivityFeed } from '@/components/issues/IssueDetail/IssueActivityFeed'
 
 interface IssueSlideOverProps {
   open: boolean
@@ -45,6 +46,10 @@ export function IssueSlideOver({
   } = trpc.issue.getById.useQuery({ issueId }, { enabled: open })
   const { data: members } = trpc.member.list.useQuery({ workspaceId }, { enabled: open })
   const { data: labelsData } = trpc.label.list.useQuery({ workspaceId }, { enabled: open })
+  const { data: currentMember } = trpc.member.getCurrentMember.useQuery(
+    { workspaceId },
+    { enabled: open }
+  )
 
   const createLabel = trpc.label.create.useMutation({
     onSuccess: () => utils.label.list.invalidate({ workspaceId }),
@@ -139,7 +144,16 @@ export function IssueSlideOver({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-3xl md:max-w-4xl">
+      <SheetContent
+        className="w-full sm:max-w-3xl md:max-w-4xl"
+        onInteractOutside={(e) => {
+          const detail = (e as any).detail
+          const target = detail?.originalEvent?.target as HTMLElement | null
+          if (target?.closest?.('.mention-suggestion-popup')) {
+            e.preventDefault()
+          }
+        }}
+      >
         <SheetTitle className="sr-only">Issue details</SheetTitle>
         <SheetDescription className="sr-only">View and edit details, description, and settings for this issue.</SheetDescription>
         
@@ -148,17 +162,18 @@ export function IssueSlideOver({
             <Loader2 className="size-6 animate-spin" />
           </div>
         ) : issue ? (
-          <div className="flex h-full flex-col">
+          <>
             <SheetHeader className="flex-shrink-0">
               <div className="flex items-center gap-2">
                 <IssueIdentifier identifier={issue.identifier} />
                 <button
                   type="button"
                   onClick={() => router.push(`/${workspaceSlug}/issues/${issue.id}`)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  title="Open full page"
+                  className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium transition-colors hover:bg-accent"
+                  title="Open in full page view"
                 >
-                  <ExternalLink className="size-3.5" />
+                  <ExternalLink className="size-3" />
+                  Open
                 </button>
               </div>
               <div className="text-left pt-2 pb-4">
@@ -176,7 +191,7 @@ export function IssueSlideOver({
               </div>
             </SheetHeader>
 
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 min-h-0">
               <div className="space-y-6 p-1">
                 <div className="grid grid-cols-[1fr_200px] gap-6">
                   <div className="space-y-6">
@@ -204,21 +219,11 @@ export function IssueSlideOver({
 
                     <Separator />
 
-                    {/* Activity feed placeholder — wired in Phase 13 */}
-                    <div>
-                      <div className="mb-2 flex items-center gap-2">
-                        <MessageSquare className="text-muted-foreground size-3.5" />
-                        <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
-                          Activity
-                        </span>
-                        {issue._count.comments > 0 && (
-                          <span className="text-muted-foreground text-xs">({issue._count.comments})</span>
-                        )}
-                      </div>
-                      <div className="border-border rounded-md border border-dashed p-4 text-center">
-                        <p className="text-muted-foreground text-xs">Comments coming in Phase 13</p>
-                      </div>
-                    </div>
+                    <IssueActivityFeed
+                      issueId={issue.id}
+                      workspaceId={workspaceId}
+                      currentUserId={currentMember?.user.id}
+                    />
                   </div>
 
                   <div className="space-y-4">
@@ -339,7 +344,7 @@ export function IssueSlideOver({
                 </div>
               </div>
             </ScrollArea>
-          </div>
+          </>
         ) : null}
       </SheetContent>
     </Sheet>

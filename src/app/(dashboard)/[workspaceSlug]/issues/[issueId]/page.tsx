@@ -155,7 +155,7 @@ export default function IssueDetailPage() {
   const selectedLabelIds = issue.labels?.map((l) => l.labelId) ?? []
 
   return (
-    <div className="mx-auto flex h-full max-w-5xl flex-col">
+    <div className="mx-auto flex h-full max-w-5xl flex-col min-h-0">
       {/* Breadcrumb bar */}
       <div className="flex items-center gap-2 border-b px-6 py-2">
         <button
@@ -171,7 +171,7 @@ export default function IssueDetailPage() {
         )}
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="p-6">
           {/* Two-column layout: 60% main / 40% sidebar */}
           <div className="grid grid-cols-[1fr_260px] gap-8">

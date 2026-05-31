@@ -31,7 +31,7 @@ function renderMentionList(currentUserId: string | undefined) {
     rect: DOMRect
   ) => {
     const container = document.createElement('div')
-    container.className = 'border border-border bg-popover z-50 max-h-48 w-56 overflow-auto rounded-md border p-1 shadow-md'
+    container.className = 'mention-suggestion-popup border border-border bg-popover z-50 max-h-48 w-56 overflow-auto rounded-md border p-1 shadow-md'
     container.style.position = 'fixed'
     container.style.left = `${rect.left}px`
     container.style.visibility = 'hidden'
@@ -46,15 +46,17 @@ function renderMentionList(currentUserId: string | undefined) {
         : `<span class="flex size-5 items-center justify-center rounded-full bg-muted text-[10px] font-medium">${item.name.charAt(0)}</span>`
       const isYou = item.id === currentUserId
       btn.innerHTML = `${avatarHtml}<span class="font-medium">${item.name}</span>${isYou ? '<span class="ml-auto text-[10px] text-muted-foreground">(you)</span>' : ''}`
-      btn.onmousedown = (e) => e.preventDefault()
-      btn.onclick = () => {
+      btn.onmousedown = (e) => {
+        e.preventDefault()
+        e.stopPropagation()
         command({ id: item.id, label: item.name })
         container.remove()
       }
       container.appendChild(btn)
     })
 
-    document.body.appendChild(container)
+    const mountTarget = document.querySelector('[data-slot="sheet-content"]') ?? document.body
+    mountTarget.appendChild(container)
     const height = container.getBoundingClientRect().height
     container.remove()
     container.style.visibility = ''
@@ -66,7 +68,7 @@ function renderMentionList(currentUserId: string | undefined) {
     } else {
       container.style.top = `${Math.max(4, rect.top - height - 4)}px`
     }
-    document.body.appendChild(container)
+    mountTarget.appendChild(container)
     popup = { element: container, destroy: () => container.remove() }
     return popup
   }

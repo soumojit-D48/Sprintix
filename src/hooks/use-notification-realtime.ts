@@ -46,7 +46,11 @@ export function useNotificationRealtime() {
     const channel = pusher.subscribe(channelName)
 
     channel.bind('pusher:subscription_error', (err: any) => {
-      console.error(`[Notification Realtime] Subscription error:`, err)
+      console.warn(`[Notification Realtime] Subscription error, retrying in 5s:`, err)
+      setTimeout(() => {
+        pusher.unsubscribe(channelName)
+        pusher.subscribe(channelName)
+      }, 5000)
     })
 
     channel.bind('pusher:subscription_succeeded', () => {

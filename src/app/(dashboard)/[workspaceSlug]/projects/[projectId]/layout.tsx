@@ -48,8 +48,11 @@ export default async function ProjectLayout({
 
   let project
   try {
-    project = await prisma.project.findUnique({
-      where: { id: projectId },
+    project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        workspace: { slug: workspaceSlug },
+      },
       select: {
         id: true,
         name: true,

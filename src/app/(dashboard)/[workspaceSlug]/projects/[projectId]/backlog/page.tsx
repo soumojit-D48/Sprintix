@@ -286,6 +286,15 @@ export default function BacklogPage() {
               </Badge>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  router.push(`/${workspaceSlug}/projects/${projectId}/sprints/${plannedSprint.id}`)
+                }
+              >
+                View Sprint
+              </Button>
               {plannedSprint.issueCount > 0 && (
                 <Button
                   size="sm"

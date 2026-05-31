@@ -122,12 +122,12 @@ export const aiRouter = router({
       const { text } = await generateText({
         model,
         system:
-          'You are a project management assistant. Given a new issue and team workload data, suggest the top 3 best-fit assignees. For each suggestion, provide the member name and a brief reasoning (1 sentence). Return a JSON array of objects with keys "name" and "reasoning". Do not include any other text outside the JSON array.',
+          'You are a project management assistant. Given a new issue and team workload data, suggest the top 3 best-fit assignees. Each suggestion must be a different person — never repeat the same person twice. For each, provide the member name and a brief reasoning (1 sentence). Return a JSON array of 3 objects with keys "name" and "reasoning". Do not include any other text outside the JSON array.',
         prompt: [
           `New Issue Title: ${input.issueTitle}`,
           `New Issue Description: ${descriptionText}`,
           `Team Members:\n${JSON.stringify(workloadData, null, 2)}`,
-          'Based on current workload and experience with similar issues, suggest the best assignee(s). Return ONLY valid JSON.',
+          'Based on current workload and experience with similar issues, suggest exactly 3 different assignees. Return ONLY valid JSON.',
         ].join('\n\n'),
       })
 
@@ -138,16 +138,26 @@ export const aiRouter = router({
 
       try {
         const parsed = JSON.parse(jsonMatch[0]) as { name: string; reasoning: string }[]
-        const suggestions = parsed.slice(0, 3).map((s) => {
-          const member = members.find(
-            (m) => m.user.name?.toLowerCase() === s.name.toLowerCase()
-          )
-          return {
-            name: s.name,
-            reasoning: s.reasoning,
-            userId: member?.user.id ?? null,
-          }
-        })
+        const seen = new Set<string>()
+        const suggestions = parsed
+          .slice(0, 5)
+          .map((s) => {
+            const member = members.find(
+              (m) => m.user.name?.toLowerCase() === s.name.toLowerCase()
+            )
+            return {
+              name: s.name,
+              reasoning: s.reasoning,
+              userId: member?.user.id ?? null,
+            }
+          })
+          .filter((s) => {
+            const key = s.userId ?? s.name.toLowerCase()
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+          .slice(0, 3)
         return { suggestions }
       } catch {
         return { suggestions: [] }

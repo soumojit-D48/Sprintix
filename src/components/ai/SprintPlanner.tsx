@@ -92,12 +92,10 @@ export function SprintPlanner({
     NO_PRIORITY: 'text-muted-foreground',
   }
 
-  if (!open && !planSprint.data) return null
-
   return (
     <div className="flex flex-col">
-      {!planSprint.data && !planSprint.isPending && (
-        <div className="px-6 pb-4">
+      {!planSprint.data && !planSprint.isPending && backlogIssues.length > 0 && (
+        <div className="pb-4">
           <Button
             variant="outline"
             size="sm"

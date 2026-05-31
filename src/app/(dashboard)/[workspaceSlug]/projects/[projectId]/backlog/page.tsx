@@ -12,6 +12,7 @@ import {
   GitFork,
   Play,
   Loader2,
+  Sparkles,
 } from 'lucide-react'
 import { trpc } from '@/lib/trpc/provider'
 import { Button } from '@/components/ui/button'
@@ -54,7 +55,7 @@ export default function BacklogPage() {
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [sprintCreateOpen, setSprintCreateOpen] = useState(false)
-  const [planSprintOpen, setPlanSprintOpen] = useState(false)
+
   const [slideOverIssueId, setSlideOverIssueId] = useState<string | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
@@ -90,6 +91,17 @@ export default function BacklogPage() {
     },
   })
 
+  const planSprintMutate = trpc.ai.planSprint.useMutation({
+    onError: (err) => {
+      if (err.message === 'UPGRADE_REQUIRED') {
+        toast.error('AI features are available on the Pro plan.')
+      } else {
+        toast.error(err.message)
+      }
+    },
+  })
+  const planSprintData = planSprintMutate.data
+
   const activeSprint = sprints?.find((s) => s.status === 'ACTIVE')
   const plannedSprint = sprints?.find((s) => s.status === 'PLANNED')
 
@@ -123,9 +135,9 @@ export default function BacklogPage() {
   const totalCount = backlogIssues.length
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* Toolbar */}
-      <div className="flex items-center justify-between border-b px-6 py-3">
+      <div className="shrink-0 flex items-center justify-between border-b px-6 py-3">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <Archive className="text-muted-foreground size-4" />
@@ -150,37 +162,58 @@ export default function BacklogPage() {
               className="h-8 w-52 pl-8 text-sm"
             />
           </div>
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="mr-1.5 size-4" />
             Add Issue
           </Button>
-          <SprintPlanner
-            projectId={projectId}
-            workspaceSlug={workspaceSlug}
-            open={planSprintOpen}
-            onOpenChange={setPlanSprintOpen}
-            onAcceptSuggestion={(issueIds) => {
-              if (plannedSprint) {
-                addIssueToSprint.mutate({ sprintId: plannedSprint.id, issueIds })
-              } else if (activeSprint) {
-                addIssueToSprint.mutate({ sprintId: activeSprint.id, issueIds })
-              }
-              setPlanSprintOpen(false)
-            }}
-            backlogIssues={backlogIssues.map((i) => ({
-              id: i.id,
-              identifier: i.identifier,
-              title: i.title,
-              priority: i.priority,
-              assignee: i.assignee ? { name: i.assignee.name } : null,
-            }))}
-          />
+          {!planSprintData && backlogIssues.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => planSprintMutate.mutate({ projectId })}
+              disabled={planSprintMutate.isPending}
+              className="border-purple-200 text-purple-700 hover:bg-purple-50 hover:text-purple-800"
+            >
+              {planSprintMutate.isPending ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="mr-1.5 size-3.5" />
+              )}
+              AI Suggest Sprint
+            </Button>
+          )}
         </div>
       </div>
 
+      {/* AI Sprint Recommendation Panel */}
+      {planSprintData && (
+        <SprintPlanner
+          projectId={projectId}
+          workspaceSlug={workspaceSlug}
+          data={planSprintData}
+          isPending={planSprintMutate.isPending}
+          onAcceptSuggestion={(issueIds) => {
+            if (plannedSprint) {
+              addIssueToSprint.mutate({ sprintId: plannedSprint.id, issueIds })
+            } else if (activeSprint) {
+              addIssueToSprint.mutate({ sprintId: activeSprint.id, issueIds })
+            }
+            planSprintMutate.reset()
+          }}
+          onReject={() => planSprintMutate.reset()}
+          backlogIssues={backlogIssues.map((i) => ({
+            id: i.id,
+            identifier: i.identifier,
+            title: i.title,
+            priority: i.priority,
+            assignee: i.assignee ? { name: i.assignee.name } : null,
+          }))}
+        />
+      )}
+
       {/* Sprint planning section */}
       {activeSprint && (
-        <div className="border-b bg-green-50/30 px-6 py-4">
+        <div className="shrink-0 border-b bg-green-50/30 px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <GitFork className="size-4 text-green-600" />
@@ -238,7 +271,7 @@ export default function BacklogPage() {
       )}
 
       {plannedSprint && !activeSprint && (
-        <div className="border-b bg-blue-50/30 px-6 py-4">
+        <div className="shrink-0 border-b bg-blue-50/30 px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <GitFork className="size-4 text-blue-600" />
@@ -303,7 +336,7 @@ export default function BacklogPage() {
       )}
 
       {!activeSprint && !plannedSprint && (
-        <div className="border-b px-6 py-3">
+        <div className="shrink-0 border-b px-6 py-3">
           <div className="flex items-center gap-2">
             <GitFork className="text-muted-foreground size-4" />
             <span className="text-muted-foreground text-sm">No active sprint</span>
@@ -356,7 +389,7 @@ export default function BacklogPage() {
           )}
         </div>
       ) : (
-        <div className="flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto">
           {sortedStatuses.map((status) => {
             const issues = grouped[status] ?? []
             const meta = STATUS_META[status]
@@ -365,54 +398,55 @@ export default function BacklogPage() {
             return (
               <div key={status}>
                 {/* Group header */}
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(status)}
-                  className="hover:bg-muted/50 flex w-full items-center gap-2 border-b px-6 py-2.5 transition-colors"
-                >
-                  {isCollapsed ? (
-                    <ChevronRight className="text-muted-foreground size-3.5" />
-                  ) : (
-                    <ChevronDown className="text-muted-foreground size-3.5" />
-                  )}
-                  <Circle
-                    className={cn('size-2.5 fill-current', meta?.color ?? 'text-gray-400')}
-                  />
-                  <span className="text-sm font-medium">{meta?.label ?? status}</span>
-                  <span className="text-muted-foreground text-xs">{issues.length}</span>
+                <div className="flex w-full items-center gap-2 border-b px-6 py-2.5">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(status)}
+                    className="hover:bg-muted/50 flex flex-1 items-center gap-2 text-left transition-colors"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="text-muted-foreground size-3.5" />
+                    ) : (
+                      <ChevronDown className="text-muted-foreground size-3.5" />
+                    )}
+                    <Circle
+                      className={cn('size-2.5 fill-current', meta?.color ?? 'text-gray-400')}
+                    />
+                    <span className="text-sm font-medium">{meta?.label ?? status}</span>
+                    <span className="text-muted-foreground text-xs">{issues.length}</span>
+                  </button>
 
-                  {/* Add these issues to active/planned sprint */}
-                  {plannedSprint && plannedSprint.issueCount === 0 && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        addIssueToSprint.mutate({
-                          sprintId: plannedSprint.id,
-                          issueIds: issues.map((i) => i.id),
-                        })
-                      }}
-                      className="text-muted-foreground hover:text-foreground ml-auto text-xs underline-offset-2 hover:underline"
-                    >
-                      Add to sprint
-                    </button>
-                  )}
-                  {activeSprint && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        addIssueToSprint.mutate({
-                          sprintId: activeSprint.id,
-                          issueIds: issues.map((i) => i.id),
-                        })
-                      }}
-                      className="text-muted-foreground hover:text-foreground ml-auto text-xs underline-offset-2 hover:underline"
-                    >
-                      Add to sprint
-                    </button>
-                  )}
-                </button>
+                  <div className="ml-auto flex items-center gap-2">
+                    {plannedSprint && plannedSprint.issueCount === 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          addIssueToSprint.mutate({
+                            sprintId: plannedSprint.id,
+                            issueIds: issues.map((i) => i.id),
+                          })
+                        }
+                        className="text-muted-foreground hover:text-foreground text-xs underline-offset-2 hover:underline"
+                      >
+                        Add to sprint
+                      </button>
+                    )}
+                    {activeSprint && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          addIssueToSprint.mutate({
+                            sprintId: activeSprint.id,
+                            issueIds: issues.map((i) => i.id),
+                          })
+                        }
+                        className="text-muted-foreground hover:text-foreground text-xs underline-offset-2 hover:underline"
+                      >
+                        Add to sprint
+                      </button>
+                    )}
+                  </div>
+                </div>
 
                 {/* Issues in group */}
                 {!isCollapsed && (

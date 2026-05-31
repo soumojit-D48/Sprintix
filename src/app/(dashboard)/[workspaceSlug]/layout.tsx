@@ -140,7 +140,7 @@ export default async function DashboardLayout({
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar workspaceName={currentWorkspace.slug} />
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex-1 overflow-hidden">{children}</main>
       </div>
       <CommandPalette projects={projects} workspaceSlug={workspaceSlug} />
       <RealtimeProvider workspaceId={currentWorkspace.id} />

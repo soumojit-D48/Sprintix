@@ -137,7 +137,7 @@ export function ProjectLayoutClient({
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto">{children}</div>
+      <div className="min-h-0 flex-1 overflow-auto">{children}</div>
     </div>
   )
 }

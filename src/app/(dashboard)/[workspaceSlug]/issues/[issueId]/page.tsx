@@ -20,6 +20,7 @@ import { IssueIdentifier } from '@/components/issues/IssueIdentifier'
 import { IssueSubIssues } from '@/components/issues/IssueSubIssues'
 import { IssueActivityFeed } from '@/components/issues/IssueDetail/IssueActivityFeed'
 import { IssueSummarizer } from '@/components/ai/IssueSummarizer'
+import { IssueAttachments } from '@/components/issues/IssueDetail/IssueAttachments'
 import { cn } from '@/lib/utils'
 
 export default function IssueDetailPage() {
@@ -218,6 +219,15 @@ export default function IssueDetailPage() {
 
               {/* AI Summary */}
               <IssueSummarizer issueId={issue.id} />
+
+              <Separator />
+
+              {/* Attachments */}
+              <IssueAttachments
+                issueId={issue.id}
+                workspaceId={issue.project?.workspaceId}
+                currentUserId={currentMember?.user.id}
+              />
 
               <Separator />
 

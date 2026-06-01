@@ -14,6 +14,8 @@ import {
   reorderIssueSchema,
   bulkUpdateSchema,
   listIssuesSchema,
+  addAttachmentSchema,
+  removeAttachmentSchema,
 } from '@/lib/validations/issue'
 
 async function getMemberByClerkId(workspaceId: string, clerkId: string) {
@@ -658,5 +660,96 @@ export const issueRouter = router({
       })
 
       return issues
+    }),
+
+  addAttachment: protectedProcedure
+    .input(addAttachmentSchema)
+    .mutation(async ({ ctx, input }) => {
+      const existing = await prisma.issue.findUnique({
+        where: { id: input.issueId },
+        include: { project: { select: { workspaceId: true } } },
+      })
+      if (!existing || existing.deletedAt) throw new TRPCError({ code: 'NOT_FOUND' })
+
+      const member = await getMemberByClerkId(existing.project.workspaceId, ctx.userId!)
+      if (!member) throw new TRPCError({ code: 'FORBIDDEN' })
+
+      const attachment = await prisma.attachment.create({
+        data: {
+          name: input.name,
+          url: input.url,
+          size: input.size,
+          mimeType: input.mimeType,
+          issueId: input.issueId,
+          uploadedById: member.userId,
+        },
+      })
+
+      await createActivityLog(
+        prisma,
+        input.issueId,
+        'issue',
+        'attachment_added',
+        { attachmentName: input.name },
+        member.userId
+      )
+
+      await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:updated', {
+        issueId: input.issueId,
+        projectId: existing.projectId,
+      })
+
+      return attachment
+    }),
+
+  removeAttachment: protectedProcedure
+    .input(removeAttachmentSchema)
+    .mutation(async ({ ctx, input }) => {
+      const attachment = await prisma.attachment.findUnique({
+        where: { id: input.attachmentId },
+        include: { issue: { include: { project: { select: { workspaceId: true } } } } },
+      })
+      if (!attachment) throw new TRPCError({ code: 'NOT_FOUND' })
+
+      const member = await getMemberByClerkId(attachment.issue.project.workspaceId, ctx.userId!)
+      if (!member) throw new TRPCError({ code: 'FORBIDDEN' })
+
+      await prisma.attachment.delete({
+        where: { id: input.attachmentId },
+      })
+
+      await createActivityLog(
+        prisma,
+        attachment.issueId,
+        'issue',
+        'attachment_removed',
+        { attachmentName: attachment.name },
+        member.userId
+      )
+
+      await triggerEvent(`private-workspace-${attachment.issue.project.workspaceId}`, 'issue:updated', {
+        issueId: attachment.issueId,
+        projectId: attachment.issue.projectId,
+      })
+
+      return { success: true }
+    }),
+
+  listAttachments: protectedProcedure
+    .input(z.object({ issueId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const existing = await prisma.issue.findUnique({
+        where: { id: input.issueId },
+        include: { project: { select: { workspaceId: true } } },
+      })
+      if (!existing || existing.deletedAt) throw new TRPCError({ code: 'NOT_FOUND' })
+
+      const member = await getMemberByClerkId(existing.project.workspaceId, ctx.userId!)
+      if (!member) throw new TRPCError({ code: 'FORBIDDEN' })
+
+      return prisma.attachment.findMany({
+        where: { issueId: input.issueId },
+        orderBy: { createdAt: 'desc' },
+      })
     }),
 })

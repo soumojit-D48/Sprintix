@@ -20,6 +20,7 @@ import { IssueLabelSelect } from './IssueLabelSelect'
 import { IssueIdentifier } from './IssueIdentifier'
 import { IssueSubIssues } from './IssueSubIssues'
 import { IssueActivityFeed } from '@/components/issues/IssueDetail/IssueActivityFeed'
+import { IssueAttachments } from '@/components/issues/IssueDetail/IssueAttachments'
 
 interface IssueSlideOverProps {
   open: boolean
@@ -215,6 +216,14 @@ export function IssueSlideOver({
                       issueId={issue.id}
                       projectId={issue.projectId}
                       workspaceSlug={workspaceSlug}
+                    />
+
+                    <Separator />
+
+                    <IssueAttachments
+                      issueId={issue.id}
+                      workspaceId={workspaceId}
+                      currentUserId={currentMember?.user.id}
                     />
 
                     <Separator />

@@ -419,6 +419,17 @@ export const issueRouter = router({
       data: { order: input.order, status: input.status },
     })
 
+    if (existing.status !== input.status) {
+      await createActivityLog(
+        prisma,
+        input.issueId,
+        'issue',
+        'status_changed',
+        { from: existing.status, to: input.status },
+        member.userId
+      )
+    }
+
     await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:updated', { issueId: input.issueId, projectId: existing.projectId })
 
     return updated

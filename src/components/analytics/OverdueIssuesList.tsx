@@ -68,7 +68,7 @@ export function OverdueIssuesList({
             {data.map((issue) => (
               <Link
                 key={issue.id}
-                href={`/${workspaceSlug}/projects/${issue.project.id}/issues/${issue.id}`}
+                href={`/${workspaceSlug}/issues/${issue.id}`}
                 className="border-border/50 bg-background/30 hover:border-border hover:bg-muted/50 flex items-center gap-3 rounded-lg border p-3 transition-colors"
               >
                 <div

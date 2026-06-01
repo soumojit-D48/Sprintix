@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import Link from 'next/link'
 import { auth } from '@clerk/nextjs/server'
 import { notFound, redirect } from 'next/navigation'
@@ -157,7 +159,7 @@ export default async function WorkspaceDashboardPage({ params }: Props) {
       }),
       prisma.activityLog.findMany({
         where: {
-          entityType: 'ISSUE',
+          entityType: 'issue',
           issue: {
             project: { workspaceId: workspace.id },
           },
@@ -173,7 +175,7 @@ export default async function WorkspaceDashboardPage({ params }: Props) {
           },
         },
         orderBy: { createdAt: 'desc' },
-        take: 15,
+        take: 5,
       }),
     ])
 
@@ -208,7 +210,7 @@ export default async function WorkspaceDashboardPage({ params }: Props) {
   const workloadMembers = workspace.members.slice(0, 10)
 
   return (
-    <main className="bg-background flex-1 overflow-auto">
+    <main className="bg-background h-full overflow-auto">
       <div className="container mx-auto px-6 py-8">
         {/* Greeting */}
         <div className="mb-8 flex items-center justify-between">
@@ -358,43 +360,53 @@ export default async function WorkspaceDashboardPage({ params }: Props) {
                   No activity yet in this workspace.
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {recentActivity.map((log: any) => (
-                    <div
-                      key={log.id}
-                      className="hover:bg-muted/30 flex items-start gap-3 rounded-lg p-2 transition-colors"
-                    >
-                      <Avatar className="size-7 shrink-0">
-                        <AvatarImage src={log.user.avatarUrl ?? ''} alt={log.user.name ?? ''} />
-                        <AvatarFallback>
-                          {(log.user.name ?? 'U').charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-muted-foreground text-sm">
-                          <span className="text-foreground font-medium">{log.user.name}</span>{' '}
-                          {log.action.toLowerCase()}
-                          {log.issue && (
-                            <>
-                              {' '}
-                              <span className="text-primary font-mono text-xs">
-                                {log.issue.identifier}
-                              </span>{' '}
-                              <span className="text-foreground">{log.issue.title}</span>
-                            </>
-                          )}
-                        </p>
-                        <p className="text-muted-foreground text-xs">
-                          {new Date(log.createdAt).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </p>
+                <div className="space-y-1">
+                  {recentActivity.map((log: any) => {
+                    const href = log.issue?.projectId
+                      ? `/${workspaceSlug}/issues/${log.entityId}`
+                      : null
+                    const content = (
+                      <div className="hover:bg-muted/30 flex items-start gap-3 rounded-lg p-2 transition-colors">
+                        <Avatar className="size-7 shrink-0">
+                          <AvatarImage src={log.user.avatarUrl ?? ''} alt={log.user.name ?? ''} />
+                          <AvatarFallback>
+                            {(log.user.name ?? 'U').charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-muted-foreground text-sm">
+                            <span className="text-foreground font-medium">{log.user.name}</span>{' '}
+                            {log.action.toLowerCase()}
+                            {log.issue && (
+                              <>
+                                {' '}
+                                <span className="text-primary font-mono text-xs">
+                                  {log.issue.identifier}
+                                </span>{' '}
+                                <span className="text-foreground">{log.issue.title}</span>
+                              </>
+                            )}
+                          </p>
+                          <p className="text-muted-foreground text-xs">
+                            {new Date(log.createdAt).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                        {href && <ChevronRight className="text-muted-foreground mt-1 size-3.5 shrink-0" />}
                       </div>
-                    </div>
-                  ))}
+                    )
+                    return href ? (
+                      <Link key={log.id} href={href} className="block">
+                        {content}
+                      </Link>
+                    ) : (
+                      <div key={log.id}>{content}</div>
+                    )
+                  })}
                 </div>
               )}
             </CardContent>

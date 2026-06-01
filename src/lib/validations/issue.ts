@@ -76,3 +76,15 @@ export const createLabelSchema = z.object({
   name: z.string().min(1).max(50),
   color: z.string().default('#6366F1'),
 })
+
+export const addAttachmentSchema = z.object({
+  issueId: z.string().min(1),
+  name: z.string().min(1),
+  url: z.string().url(),
+  size: z.number().int().positive(),
+  mimeType: z.string().min(1),
+})
+
+export const removeAttachmentSchema = z.object({
+  attachmentId: z.string().min(1),
+})

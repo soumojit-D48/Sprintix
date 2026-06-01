@@ -7,12 +7,20 @@ function isTiptapEmpty(body: Record<string, unknown>): boolean {
   return false
 }
 
+export const messageAttachmentSchema = z.object({
+  name: z.string().min(1),
+  url: z.string().url(),
+  size: z.number().int().positive(),
+  mimeType: z.string().min(1),
+})
+
 export const sendMessageSchema = z.object({
   channelId: z.string().min(1),
   body: z.record(z.string(), z.any()).refine((val) => !isTiptapEmpty(val), {
     message: 'Message body cannot be empty',
   }),
   parentId: z.string().nullable().optional(),
+  attachments: z.array(messageAttachmentSchema).optional(),
 })
 
 export const editMessageSchema = z.object({

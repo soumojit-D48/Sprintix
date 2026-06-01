@@ -1,14 +1,15 @@
 'use client'
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
-import { Send, SmilePlus, X } from 'lucide-react'
+import { Send, SmilePlus, X, Paperclip, Loader2, Image, FileIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { trpc } from '@/lib/trpc/provider'
 import { useTypingIndicator } from '@/hooks/use-typing-indicator'
+import { useUploadThing } from '@/hooks/use-upload'
 import { useChatStore } from '@/stores/chat-store'
 import { toast } from 'sonner'
 import {
@@ -45,6 +46,36 @@ export function MessageInput({ channelId, workspaceId, channelType, currentUserI
   )
 
   const isEditing = editingMessage?.channelId === channelId
+
+  const [pendingFiles, setPendingFiles] = useState<{ file: File; preview: string | undefined }[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+
+  const { startUpload } = useUploadThing("messageAttachment", {
+    onUploadBegin: () => setIsUploading(true),
+    onClientUploadComplete: () => setIsUploading(false),
+    onUploadError: (err: Error) => {
+      toast.error(err.message)
+      setIsUploading(false)
+    },
+  })
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
+    const newFiles = files.map((file) => ({
+      file,
+      preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+    }))
+    setPendingFiles((prev) => [...prev, ...newFiles])
+    e.target.value = ""
+  }
+
+  const removePendingFile = (index: number) => {
+    setPendingFiles((prev) => {
+      const file = prev[index]
+      if (file?.preview) URL.revokeObjectURL(file.preview)
+      return prev.filter((_, i) => i !== index)
+    })
+  }
 
   const sendMessage = trpc.message.send.useMutation({
     onSuccess: () => {
@@ -219,7 +250,7 @@ export function MessageInput({ channelId, workspaceId, channelType, currentUserI
     }
   }, [isEditing, editingMessage?.id])
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     if (!editor) return
     const json = editor.getJSON()
     const content = (json as any)?.content
@@ -228,7 +259,28 @@ export function MessageInput({ channelId, workspaceId, channelType, currentUserI
       content.length === 0 ||
       (content.length === 1 && content[0]?.type === 'paragraph' && (!content[0]?.content || content[0].content.length === 0))
 
-    if (isEmpty) return
+    if (isEmpty && pendingFiles.length === 0) return
+
+    let attachments: { name: string; url: string; size: number; mimeType: string }[] = []
+
+    if (pendingFiles.length > 0) {
+      try {
+        const uploadRes = await startUpload(pendingFiles.map((f) => f.file))
+        if (!uploadRes) {
+          toast.error("Failed to upload files")
+          return
+        }
+        attachments = uploadRes.map((f) => ({
+          name: f.name,
+          url: f.url,
+          size: f.size,
+          mimeType: f.type,
+        }))
+      } catch {
+        toast.error("Failed to upload files")
+        return
+      }
+    }
 
     if (isEditing && editingMessage) {
       editMessage.mutate({
@@ -239,9 +291,12 @@ export function MessageInput({ channelId, workspaceId, channelType, currentUserI
       sendMessage.mutate({
         channelId,
         body: json as Record<string, any>,
+        attachments: attachments.length > 0 ? attachments : undefined,
       })
     }
-  }, [editor, channelId, sendMessage, isEditing, editingMessage, editMessage])
+
+    setPendingFiles([])
+  }, [editor, channelId, sendMessage, isEditing, editingMessage, editMessage, pendingFiles, startUpload])
 
   const handleCancelEdit = () => {
     clearEditingMessage()
@@ -274,12 +329,56 @@ export function MessageInput({ channelId, workspaceId, channelType, currentUserI
           </Button>
         </div>
       )}
-      <div className="border-border focus-within:border-ring flex items-end gap-2 rounded-lg border bg-background p-1">
-        <EditorContent
-          editor={editor}
-          className="prose prose-sm max-h-32 min-h-[40px] flex-1 overflow-y-auto px-3 py-2"
-        />
-        <div className="flex items-center gap-1 pb-1 pr-1">
+      <div className="border-border focus-within:border-ring rounded-lg border bg-background">
+        {pendingFiles.length > 0 && (
+          <div className="flex flex-wrap gap-2 border-b px-3 py-2">
+            {pendingFiles.map((f, i) => (
+              <div key={i} className="bg-muted flex items-center gap-2 rounded-md px-2 py-1 text-xs">
+                {f.preview ? (
+                  <img src={f.preview} alt="" className="size-6 rounded object-cover" />
+                ) : (
+                  <FileIcon className="size-4" />
+                )}
+                <span className="max-w-[120px] truncate">{f.file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removePendingFile(i)}
+                  className="text-muted-foreground hover:text-foreground ml-1 transition-colors"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
+            {isUploading && <Loader2 className="size-4 animate-spin" />}
+          </div>
+        )}
+        <div className="flex items-end gap-2 p-1">
+          <EditorContent
+            editor={editor}
+            className="prose prose-sm max-h-32 min-h-[40px] flex-1 overflow-y-auto px-3 py-2"
+          />
+          <div className="flex items-center gap-1 pb-1 pr-1">
+            <input
+              type="file"
+              id="file-upload"
+              className="hidden"
+              multiple
+              accept="image/*,.pdf,.zip,.docx,.mp4,.mov"
+              onChange={handleFileSelect}
+            />
+            <label htmlFor="file-upload">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                disabled={isUploading}
+                asChild
+              >
+                <span>
+                  <Paperclip className="size-4" />
+                </span>
+              </Button>
+            </label>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="size-8">
@@ -306,6 +405,7 @@ export function MessageInput({ channelId, workspaceId, channelType, currentUserI
           >
             <Send className="size-4" />
           </Button>
+          </div>
         </div>
       </div>
     </div>

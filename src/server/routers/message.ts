@@ -66,6 +66,9 @@ async function verifyChannelAccess(prisma: any, userId: string, channelId: strin
 const messageIncludes = {
   sender: { select: { id: true, name: true, avatarUrl: true } },
   reactions: { select: { id: true, emoji: true, userId: true } },
+  attachments: {
+    select: { id: true, name: true, url: true, size: true, mimeType: true },
+  },
   _count: { select: { replies: true } },
 }
 
@@ -109,6 +112,18 @@ export const messageRouter = router({
           channelId: input.channelId,
           senderId: user.id,
           parentId: input.parentId ?? null,
+          ...(input.attachments?.length
+            ? {
+                attachments: {
+                  create: input.attachments.map((a) => ({
+                    name: a.name,
+                    url: a.url,
+                    size: a.size,
+                    mimeType: a.mimeType,
+                  })),
+                },
+              }
+            : {}),
         },
         include: messageIncludes,
       })

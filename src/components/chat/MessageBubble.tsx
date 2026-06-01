@@ -10,6 +10,8 @@ import {
   Pencil,
   Trash2,
   SmilePlus,
+  FileIcon,
+  Download,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -140,6 +142,40 @@ export function MessageBubble({ message, isFirstInGroup, workspaceSlug, currentU
 
           {message.editedAt && (
             <span className="text-muted-foreground mt-0.5 block text-[10px]">(edited)</span>
+          )}
+
+          {message.attachments && message.attachments.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {message.attachments.map((att: any) =>
+                att.mimeType?.startsWith('image/') ? (
+                  <a
+                    key={att.id}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group relative"
+                  >
+                    <img
+                      src={att.url}
+                      alt={att.name}
+                      className="border-border h-24 w-32 rounded-lg border object-cover transition-opacity group-hover:opacity-90"
+                    />
+                  </a>
+                ) : (
+                  <a
+                    key={att.id}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="border-border bg-muted hover:bg-muted/80 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors"
+                  >
+                    <FileIcon className="size-4 shrink-0" />
+                    <span className="max-w-[120px] truncate">{att.name}</span>
+                    <Download className="text-muted-foreground size-3 shrink-0" />
+                  </a>
+                )
+              )}
+            </div>
           )}
 
           {Object.keys(groupedReactions).length > 0 && (

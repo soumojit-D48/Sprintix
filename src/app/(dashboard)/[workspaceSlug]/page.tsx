@@ -15,10 +15,33 @@ import {
   ChevronRight,
   LayoutDashboard,
   Users,
+  TrendingUp,
+  TrendingDown,
+  ArrowUpRight,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 type Props = {
   params: Promise<{ workspaceSlug: string }>
+}
+
+function getWeekRange() {
+  const now = new Date()
+  const dayOfWeek = now.getDay()
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+  const monday = new Date(now)
+  monday.setDate(now.getDate() + diffToMonday)
+  monday.setHours(0, 0, 0, 0)
+  const nextMonday = new Date(monday)
+  nextMonday.setDate(monday.getDate() + 7)
+  return { weekStart: monday, weekEnd: nextMonday }
+}
+
+function getLastWeekRange() {
+  const { weekStart } = getWeekRange()
+  const lastWeekStart = new Date(weekStart)
+  lastWeekStart.setDate(weekStart.getDate() - 7)
+  return { weekStart: lastWeekStart, weekEnd: weekStart }
 }
 
 async function getWorkspaceData(workspaceSlug: string, userId: string) {
@@ -93,63 +116,96 @@ export default async function WorkspaceDashboardPage({ params }: Props) {
     color: p.color ?? '#3B82F6',
   }))
 
-  // Fetch assigned issues
-  const assignedIssues = await prisma.issue.findMany({
+  const { weekStart, weekEnd } = getWeekRange()
+  const lastWeek = getLastWeekRange()
+
+  const [openIssueCount, thisWeekCompleted, lastWeekCompleted, overdueCount, memberCount, recentActivity] =
+    await Promise.all([
+      prisma.issue.count({
+        where: {
+          project: { workspaceId: workspace.id },
+          deletedAt: null,
+          status: { notIn: ['DONE', 'CANCELLED'] },
+        },
+      }),
+      prisma.issue.count({
+        where: {
+          project: { workspaceId: workspace.id },
+          status: 'DONE',
+          updatedAt: { gte: weekStart, lt: weekEnd },
+          deletedAt: null,
+        },
+      }),
+      prisma.issue.count({
+        where: {
+          project: { workspaceId: workspace.id },
+          status: 'DONE',
+          updatedAt: { gte: lastWeek.weekStart, lt: lastWeek.weekEnd },
+          deletedAt: null,
+        },
+      }),
+      prisma.issue.count({
+        where: {
+          project: { workspaceId: workspace.id },
+          deletedAt: null,
+          status: { notIn: ['DONE', 'CANCELLED'] },
+          dueDate: { not: null, lt: new Date() },
+        },
+      }),
+      prisma.workspaceMember.count({
+        where: { workspaceId: workspace.id },
+      }),
+      prisma.activityLog.findMany({
+        where: {
+          entityType: 'ISSUE',
+          issue: {
+            project: { workspaceId: workspace.id },
+          },
+        },
+        include: {
+          user: true,
+          issue: {
+            select: {
+              identifier: true,
+              title: true,
+              projectId: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 15,
+      }),
+    ])
+
+  const trend =
+    lastWeekCompleted > 0
+      ? Math.round(((thisWeekCompleted - lastWeekCompleted) / lastWeekCompleted) * 100)
+      : thisWeekCompleted > 0
+        ? 100
+        : 0
+
+  const isTrendPositive = trend >= 0
+
+  const overdueIssues = await prisma.issue.findMany({
     where: {
       project: { workspaceId: workspace.id },
-      assigneeId: user.id,
       deletedAt: null,
+      status: { notIn: ['DONE', 'CANCELLED'] },
+      dueDate: { not: null, lt: new Date() },
     },
     include: {
-      project: true,
+      assignee: {
+        select: { id: true, name: true, avatarUrl: true },
+      },
+      project: {
+        select: { id: true, name: true, identifier: true, color: true },
+      },
     },
-    orderBy: { updatedAt: 'desc' },
+    orderBy: { dueDate: 'asc' },
     take: 10,
   })
 
-  // Fetch recent activity
-  const recentActivity = await prisma.activityLog.findMany({
-    where: {
-      entityType: 'ISSUE',
-      issue: {
-        project: { workspaceId: workspace.id },
-      },
-    },
-    include: {
-      user: true,
-      issue: {
-        select: {
-          identifier: true,
-          title: true,
-        },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 15,
-  })
-
-  // Count issues grouped by status
-  const issueCounts = await prisma.issue.groupBy({
-    by: ['status'],
-    where: {
-      project: { workspaceId: workspace.id },
-      deletedAt: null,
-    },
-    _count: true,
-  })
-
-  const countsMap: Record<string, number> = {}
-  issueCounts.forEach((item: any) => {
-    countsMap[item.status] = item._count
-  })
-
-  const totalIssues =
-    (countsMap.BACKLOG ?? 0) +
-    (countsMap.TODO ?? 0) +
-    (countsMap.IN_PROGRESS ?? 0) +
-    (countsMap.IN_REVIEW ?? 0) +
-    (countsMap.DONE ?? 0) +
-    (countsMap.CANCELLED ?? 0)
+  const workloadMembers = workspace.members.slice(0, 10)
 
   return (
     <main className="bg-background flex-1 overflow-auto">
@@ -161,121 +217,130 @@ export default async function WorkspaceDashboardPage({ params }: Props) {
               Welcome back, {user.name?.split(' ')[0] || 'User'}
             </h1>
             <p className="text-muted-foreground mt-1 text-sm">
-              Here's an overview of your workspace{' '}
+              Here's what&apos;s happening in{' '}
               <span className="text-foreground font-medium">{workspace.name}</span>
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/${workspaceSlug}/analytics`}>
+                <BarChart3 className="mr-1.5 size-3.5" />
+                Analytics
+              </Link>
+            </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href={`/${workspaceSlug}/settings`}>Workspace Settings</Link>
             </Button>
           </div>
         </div>
 
-        {/* Stats Cards */}
+        {/* Row 1: Stat Cards */}
         <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="border-border/50 bg-card/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-muted-foreground text-sm font-medium">
-                Total Issues
+                Open Issues
               </CardTitle>
               <BarChart3 className="text-muted-foreground size-4" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalIssues}</div>
+              <div className="text-2xl font-bold">{openIssueCount}</div>
             </CardContent>
           </Card>
 
           <Card className="border-border/50 bg-card/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-muted-foreground text-sm font-medium">
-                My Assigned
+                Completed This Week
+              </CardTitle>
+              <CheckCircle2 className="text-muted-foreground size-4" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{thisWeekCompleted}</div>
+              <div className="mt-1 flex items-center gap-1">
+                {isTrendPositive ? (
+                  <TrendingUp className="size-3 text-green-500" />
+                ) : (
+                  <TrendingDown className="size-3 text-red-500" />
+                )}
+                <span
+                  className={cn(
+                    'text-xs font-medium',
+                    isTrendPositive ? 'text-green-500' : 'text-red-500'
+                  )}
+                >
+                  {trend > 0 ? '+' : ''}
+                  {trend}%
+                </span>
+                <span className="text-muted-foreground text-xs">vs last week</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/50 bg-card/50">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-muted-foreground text-sm font-medium">
+                Overdue
+              </CardTitle>
+              <AlertCircle className="text-muted-foreground size-4" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{overdueCount}</div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/50 bg-card/50">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-muted-foreground text-sm font-medium">
+                Team Members
               </CardTitle>
               <Users className="text-muted-foreground size-4" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{assignedIssues.length}</div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50 bg-card/50">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-muted-foreground text-sm font-medium">
-                In Progress
-              </CardTitle>
-              <Clock className="text-muted-foreground size-4" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{countsMap.IN_PROGRESS ?? 0}</div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50 bg-card/50">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-muted-foreground text-sm font-medium">Done</CardTitle>
-              <CheckCircle2 className="text-muted-foreground size-4" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{countsMap.DONE ?? 0}</div>
+              <div className="text-2xl font-bold">{memberCount}</div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Recent Issues & Activity Grid */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Recent Issues */}
-          <Card className="border-border/50 bg-card/50">
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="size-4" />
-                  My Assigned Issues
-                  <Badge variant="secondary" className="ml-auto">
-                    {assignedIssues.length}
-                  </Badge>
-                </div>
-              </CardTitle>
+        {/* Row 2: Team Workload (simplified server-side version) */}
+        {workloadMembers.length > 0 && (
+          <Card className="border-border/50 bg-card/50 mb-8">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+              <CardTitle className="text-base font-semibold">Team Workload</CardTitle>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href={`/${workspaceSlug}/analytics`}>
+                  <ArrowUpRight className="mr-1 size-3.5" />
+                  Full report
+                </Link>
+              </Button>
             </CardHeader>
             <CardContent>
-              {assignedIssues.length === 0 ? (
-                <div className="text-muted-foreground py-6 text-center text-sm">
-                  <FolderKanban className="mx-auto mb-2 size-8 opacity-40" />
-                  No issues assigned to you yet.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {assignedIssues.map((issue: any) => (
-                    <Link
-                      key={issue.id}
-                      href={`/${workspaceSlug}/projects/${issue.project.id}/issues/${issue.id}`}
-                      className="border-border/50 bg-background/30 hover:border-border hover:bg-muted/50 flex items-center gap-3 rounded-lg border p-3 transition-colors"
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {workloadMembers.map((member) => {
+                  const initials = (member.user.name ?? 'U').charAt(0).toUpperCase()
+                  return (
+                    <div
+                      key={member.id}
+                      className="border-border/50 bg-background/30 flex items-center gap-3 rounded-lg border p-3"
                     >
-                      <Badge
-                        variant={
-                          issue.status === 'IN_PROGRESS'
-                            ? 'default'
-                            : issue.status === 'DONE'
-                              ? 'secondary'
-                              : 'outline'
-                        }
-                        className="text-xs"
-                      >
-                        {issue.status.replace('_', ' ')}
-                      </Badge>
+                      <Avatar className="size-8 shrink-0">
+                        <AvatarImage src={member.user.avatarUrl ?? ''} alt={member.user.name ?? ''} />
+                        <AvatarFallback>{initials}</AvatarFallback>
+                      </Avatar>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {issue.identifier} — {issue.title}
-                        </p>
-                        <p className="text-muted-foreground text-xs">{issue.project.name}</p>
+                        <p className="truncate text-sm font-medium">{member.user.name}</p>
+                        <p className="text-muted-foreground text-xs">{member.role}</p>
                       </div>
-                      <ChevronRight className="text-muted-foreground size-4 shrink-0" />
-                    </Link>
-                  ))}
-                </div>
-              )}
+                    </div>
+                  )
+                })}
+              </div>
             </CardContent>
           </Card>
+        )}
 
+        {/* Row 3: Recent Activity & Overdue Issues */}
+        <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Recent Activity */}
           <Card className="border-border/50 bg-card/50">
             <CardHeader>
@@ -334,11 +399,69 @@ export default async function WorkspaceDashboardPage({ params }: Props) {
               )}
             </CardContent>
           </Card>
+
+          {/* Overdue Issues */}
+          <Card className="border-border/50 bg-card/50">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+              <CardTitle className="text-base font-semibold">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="size-4 text-red-500" />
+                  Overdue Issues
+                  {overdueIssues.length > 0 && (
+                    <Badge variant="destructive" className="text-xs">
+                      {overdueIssues.length}
+                    </Badge>
+                  )}
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {overdueIssues.length === 0 ? (
+                <div className="text-muted-foreground flex flex-col items-center py-6 text-sm">
+                  <CheckCircle2 className="mb-2 size-8 opacity-40" />
+                  No overdue issues. Great job!
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {overdueIssues.map((issue) => (
+                    <Link
+                      key={issue.id}
+                      href={`/${workspaceSlug}/issues/${issue.id}`}
+                      className="border-border/50 bg-background/30 hover:border-border hover:bg-muted/50 flex items-center gap-3 rounded-lg border p-3 transition-colors"
+                    >
+                      <div
+                        className="flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white"
+                        style={{ backgroundColor: issue.project.color ?? '#3B82F6' }}
+                      >
+                        {issue.project.identifier.charAt(0)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-medium">
+                            {issue.identifier} — {issue.title}
+                          </span>
+                          <Badge variant="destructive" className="shrink-0 text-[10px]">
+                            {Math.floor(
+                              (Date.now() - new Date(issue.dueDate!).getTime()) /
+                                (1000 * 60 * 60 * 24)
+                            )}
+                            d overdue
+                          </Badge>
+                        </div>
+                        <p className="text-muted-foreground text-xs">{issue.project.name}</p>
+                      </div>
+                      <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Quick Access Projects */}
         {projects.length > 0 && (
-          <div className="mt-8">
+          <div>
             <h2 className="mb-4 text-lg font-semibold">Quick Access</h2>
             <div className="flex flex-wrap gap-3">
               {projects.slice(0, 6).map((project) => (

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { TRPCError } from '@trpc/server'
 import { triggerEvent } from '@/lib/pusher'
 import { notifyMentioned, notifyCommented } from '@/lib/notifications'
+import { sendMentionEmail } from '@/lib/email'
 import {
   createCommentSchema,
   updateCommentSchema,
@@ -39,6 +40,21 @@ async function getIssueWithProjectId(issueId: string) {
 
 import { createActivityLog } from '@/lib/activity-log'
 import { extractMentionsFromTiptap } from '@/lib/mentions'
+
+function extractTextPreview(json: unknown): string {
+  if (!json || typeof json !== 'object') return ''
+  const doc = json as { content?: { content?: { text?: string }[] }[] }
+  if (!doc.content) return ''
+  let text = ''
+  for (const node of doc.content) {
+    if (node.content) {
+      for (const inline of node.content) {
+        if (inline.text) text += inline.text
+      }
+    }
+  }
+  return text.trim().substring(0, 200)
+}
 
 export const commentRouter = router({
   create: protectedProcedure.input(createCommentSchema).mutation(async ({ ctx, input }) => {
@@ -106,6 +122,24 @@ export const commentRouter = router({
         filteredMentionedIds,
         user.name
       )
+
+      // Send mention emails
+      const mentionedUsers = await prisma.user.findMany({
+        where: { id: { in: filteredMentionedIds } },
+        select: { id: true, email: true },
+      })
+      const snippet = extractTextPreview(input.body)
+      const conversationUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/issues/${issue.id}`
+      for (const mentionedUser of mentionedUsers) {
+        await sendMentionEmail({
+          email: mentionedUser.email,
+          actorName: user.name,
+          contextType: 'issue',
+          contextName: issue.identifier,
+          snippet,
+          conversationUrl,
+        })
+      }
     }
 
     // Notify assignee and reporter of comment (excluding commenter and anyone already notified via mention)

@@ -5,6 +5,7 @@ import { TRPCError } from '@trpc/server'
 import { triggerEvent } from '@/lib/pusher'
 import { createActivityLog } from '@/lib/activity-log'
 import { notifyAssigned, notifyStatusChanged } from '@/lib/notifications'
+import { sendAssignedEmail } from '@/lib/email'
 import {
   createIssueSchema,
   updateIssueSchema,
@@ -17,6 +18,22 @@ import {
   addAttachmentSchema,
   removeAttachmentSchema,
 } from '@/lib/validations/issue'
+
+function extractTextPreview(description: unknown): string | null {
+  if (!description || typeof description !== 'object') return null
+  const doc = description as { type?: string; content?: { type?: string; content?: { text?: string }[] }[] }
+  if (!doc.content) return null
+  let text = ''
+  for (const node of doc.content) {
+    if (node.content) {
+      for (const inline of node.content) {
+        if (inline.text) text += inline.text
+      }
+    }
+    if (node.type === 'paragraph') text += ' '
+  }
+  return text.trim().substring(0, 200) || null
+}
 
 async function getMemberByClerkId(workspaceId: string, clerkId: string) {
   return prisma.workspaceMember.findFirst({
@@ -83,6 +100,32 @@ export const issueRouter = router({
         input.assigneeId,
         actor?.name || 'Someone'
       )
+
+      // Send email to assignee
+      const assigneeUser = await prisma.user.findUnique({
+        where: { id: issue.assigneeId! },
+        select: { email: true, name: true },
+      })
+      if (assigneeUser) {
+        const project = await prisma.project.findUnique({
+          where: { id: input.projectId },
+          select: { name: true, workspace: { select: { slug: true } } },
+        })
+        if (project) {
+          await sendAssignedEmail({
+            email: assigneeUser.email,
+            issueIdentifier: issue.identifier,
+            issueTitle: issue.title,
+            priority: input.priority ?? 'NO_PRIORITY',
+            descriptionPreview: extractTextPreview(input.description),
+            dueDate: input.dueDate ? new Date(input.dueDate).toLocaleDateString() : null,
+            assigneeName: assigneeUser.name,
+            projectName: project.name,
+            workspaceSlug: project.workspace.slug,
+            issueId: issue.id,
+          })
+        }
+      }
     }
 
     await triggerEvent(`private-workspace-${workspaceId}`, 'issue:created', { issueId: issue.id, projectId: issue.projectId })
@@ -399,6 +442,35 @@ export const issueRouter = router({
         issue.assigneeId,
         actor?.name || 'Someone'
       )
+
+      // Send email to assignee (assign mutation)
+      const assigneeUser = await prisma.user.findUnique({
+        where: { id: issue.assigneeId! },
+        select: { email: true, name: true },
+      })
+      if (assigneeUser) {
+        const project = await prisma.project.findUnique({
+          where: { id: existing.projectId },
+          select: { name: true, workspace: { select: { slug: true } } },
+        })
+        if (project) {
+          const descriptionPreview = existing.description
+            ? extractTextPreview(existing.description)
+            : null
+          await sendAssignedEmail({
+            email: assigneeUser.email,
+            issueIdentifier: issue.identifier,
+            issueTitle: issue.title,
+            priority: existing.priority,
+            descriptionPreview,
+            dueDate: existing.dueDate ? existing.dueDate.toLocaleDateString() : null,
+            assigneeName: assigneeUser.name,
+            projectName: project.name,
+            workspaceSlug: project.workspace.slug,
+            issueId: issue.id,
+          })
+        }
+      }
     }
 
     await triggerEvent(`private-workspace-${existing.project.workspaceId}`, 'issue:updated', { issueId: issue.id, projectId: issue.projectId })

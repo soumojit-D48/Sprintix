@@ -19,6 +19,7 @@ model User {
   email                   String            @unique
   name                    String
   avatarUrl               String?
+  timezone                String?
   notificationPreferences Json              @default("{}")
   createdAt               DateTime          @default(now())
   workspaceMembers        WorkspaceMember[]
@@ -29,6 +30,7 @@ model User {
   sentMessages            Message[]
   activityLogs            ActivityLog[]
   channelMembers          ChannelMember[]
+  apiKeys                 ApiKey[]
 }
 
 //  Workspaces 
@@ -355,6 +357,18 @@ enum NotificationType {
   DUE_SOON
   INVITED
   MESSAGE_RECEIVED
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  name       String
+  keyPrefix  String
+  keyHash    String
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
 }
 
 enum ChannelType {

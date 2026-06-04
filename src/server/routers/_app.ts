@@ -12,6 +12,7 @@ import { billingRouter } from './billing'
 import { aiRouter } from './ai'
 import { analyticsRouter } from './analytics'
 import { labelRouter } from './label'
+import { settingsRouter } from './settings'
 
 export const appRouter = router({
   workspace: workspaceRouter,
@@ -27,6 +28,7 @@ export const appRouter = router({
   ai: aiRouter,
   analytics: analyticsRouter,
   label: labelRouter,
+  settings: settingsRouter,
 })
 
 export type AppRouter = typeof appRouter

@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { Loader2, Trash2, AlertTriangle } from 'lucide-react'
 import { trpc } from '@/lib/trpc/provider'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   Dialog,
   DialogContent,
@@ -16,17 +18,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { UploadButton } from '@/hooks/use-upload'
+import { useCurrentMember } from '@/hooks/use-current-member'
 import { toast } from 'sonner'
-
-interface WorkspaceSettingsPageProps {
-  workspace: {
-    id: string
-    name: string
-    slug: string
-    plan: string
-    createdAt: Date
-  }
-}
 
 function generateSlug(name: string): string {
   return name
@@ -37,21 +31,37 @@ function generateSlug(name: string): string {
     .replace(/^-|-$/g, '')
 }
 
-export default function WorkspaceSettingsPage({ workspace }: WorkspaceSettingsPageProps) {
+export default function GeneralSettingsPage() {
+  const params = useParams()
+  const workspaceSlug = params.workspaceSlug as string
   const router = useRouter()
+  const { isOwner } = useCurrentMember()
 
-  const [name, setName] = useState(workspace.name)
-  const [slug, setSlug] = useState(workspace.slug)
+  const { data: workspace, isLoading } = trpc.workspace.getBySlug.useQuery({ slug: workspaceSlug })
+
+  const [name, setName] = useState('')
+  const [slug, setSlug] = useState('')
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [slugError, setSlugError] = useState('')
+  const [initialized, setInitialized] = useState(false)
 
   const utils = trpc.useUtils()
+
+  useEffect(() => {
+    if (workspace && !initialized) {
+      setName(workspace.name)
+      setSlug(workspace.slug)
+      setLogoUrl(workspace.logoUrl ?? null)
+      setInitialized(true)
+    }
+  }, [workspace, initialized])
 
   const updateWorkspace = trpc.workspace.update.useMutation({
     onSuccess: (data) => {
       toast.success('Workspace updated successfully')
-      if (data.slug !== workspace.slug) {
+      if (data.slug !== workspace?.slug) {
         router.push(`/${data.slug}/settings`)
       }
       utils.workspace.getUserWorkspaces.invalidate()
@@ -73,6 +83,19 @@ export default function WorkspaceSettingsPage({ workspace }: WorkspaceSettingsPa
     },
   })
 
+  if (isLoading || !workspace) {
+    return (
+      <main className="bg-background flex-1 overflow-auto">
+        <div className="container mx-auto max-w-2xl px-6 py-8">
+          <div className="text-muted-foreground flex items-center gap-2">
+            <Loader2 className="size-4 animate-spin" />
+            Loading...
+          </div>
+        </div>
+      </main>
+    )
+  }
+
   const handleNameChange = (newName: string) => {
     setName(newName)
     if (!slugError) {
@@ -89,6 +112,7 @@ export default function WorkspaceSettingsPage({ workspace }: WorkspaceSettingsPa
       workspaceId: workspace.id,
       name: name.trim(),
       slug: slug.trim(),
+      logoUrl: logoUrl,
     })
   }
 
@@ -100,20 +124,56 @@ export default function WorkspaceSettingsPage({ workspace }: WorkspaceSettingsPa
     deleteWorkspace.mutate({ workspaceId: workspace.id })
   }
 
-  const hasChanges = name !== workspace.name || slug !== workspace.slug
+  const hasChanges = name !== workspace.name || slug !== workspace.slug || logoUrl !== (workspace.logoUrl ?? null)
 
   return (
-    <main className="bg-background flex-1 overflow-auto">
+    <main className="flex-1 overflow-auto">
       <div className="container mx-auto max-w-2xl px-6 py-8">
-        <h1 className="mb-8 text-2xl font-bold">Workspace Settings</h1>
+        <h1 className="mb-8 text-2xl font-bold">General Settings</h1>
 
-        {/* General Settings */}
+        {/* Workspace Info */}
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>General</CardTitle>
-            <CardDescription>Manage your workspace name and URL</CardDescription>
+            <CardTitle>Workspace Info</CardTitle>
+            <CardDescription>Manage your workspace name, URL, and logo</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Logo Upload */}
+            <div className="space-y-2">
+              <Label>Workspace Logo</Label>
+              <div className="flex items-center gap-4">
+                <Avatar size="lg">
+                  <AvatarImage src={logoUrl ?? ''} />
+                  <AvatarFallback className="text-lg">
+                    {(workspace.name ?? 'W').charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex gap-2">
+                  <UploadButton
+                    endpoint="workspaceLogo"
+                    onClientUploadComplete={(res) => {
+                      if (res?.[0]) {
+                        setLogoUrl(res[0].url)
+                        toast.success('Logo uploaded')
+                      }
+                    }}
+                    onUploadError={(error) => {
+                      toast.error(error.message)
+                    }}
+                  />
+                  {logoUrl && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLogoUrl(null)}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="name">Workspace Name</Label>
               <Input
@@ -175,26 +235,28 @@ export default function WorkspaceSettingsPage({ workspace }: WorkspaceSettingsPa
         </Card>
 
         {/* Danger Zone */}
-        <Card className="border-destructive/50">
-          <CardHeader>
-            <CardTitle className="text-destructive">Danger Zone</CardTitle>
-            <CardDescription>Irreversible and destructive actions</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Delete Workspace</p>
-                <p className="text-muted-foreground text-sm">
-                  Once you delete a workspace, there is no going back.
-                </p>
+        {isOwner && (
+          <Card id="danger-zone" className="border-destructive/50">
+            <CardHeader>
+              <CardTitle className="text-destructive">Danger Zone</CardTitle>
+              <CardDescription>Irreversible and destructive actions</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Delete Workspace</p>
+                  <p className="text-muted-foreground text-sm">
+                    Once you delete a workspace, there is no going back.
+                  </p>
+                </div>
+                <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
+                  <Trash2 className="mr-2 size-4" />
+                  Delete
+                </Button>
               </div>
-              <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="mr-2 size-4" />
-                Delete
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

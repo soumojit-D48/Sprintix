@@ -1,13 +1,14 @@
 import { auth } from '@clerk/nextjs/server'
 import { notFound, redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
-import WorkspaceSettingsPage from './page'
+import { SettingsSidebar } from './settings-sidebar'
 
 type Props = {
   params: Promise<{ workspaceSlug: string }>
+  children: React.ReactNode
 }
 
-export default async function WorkspaceSettingsLayout({ params }: Props) {
+export default async function SettingsLayout({ params, children }: Props) {
   const { userId } = await auth()
   if (!userId) {
     redirect('/sign-in')
@@ -37,14 +38,14 @@ export default async function WorkspaceSettingsLayout({ params }: Props) {
   }
 
   return (
-    <WorkspaceSettingsPage
-      workspace={{
-        id: workspace.workspace.id,
-        name: workspace.workspace.name,
-        slug: workspace.workspace.slug,
-        plan: workspace.workspace.plan,
-        createdAt: workspace.workspace.createdAt,
-      }}
-    />
+    <div className="bg-background flex h-full">
+      <SettingsSidebar
+        workspaceSlug={workspaceSlug}
+        isOwner={workspace.role === 'OWNER'}
+      />
+      <div className="flex-1 overflow-auto">
+        {children}
+      </div>
+    </div>
   )
 }

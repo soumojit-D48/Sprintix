@@ -1,7 +1,7 @@
-import { auth } from '@clerk/nextjs/server'
-import { redirect } from 'next/navigation'
+'use client'
+
 import Link from 'next/link'
-import { prisma } from '@/lib/prisma'
+import { useAuth, UserButton } from '@clerk/nextjs'
 import {
   LayoutDashboard,
   FolderKanban,
@@ -10,7 +10,6 @@ import {
   MessageSquareText,
   GitFork,
   ArrowRight,
-  CheckCircle2,
 } from 'lucide-react'
 
 const features = [
@@ -46,26 +45,8 @@ const features = [
   },
 ]
 
-export default async function LandingPage() {
-  const { userId } = await auth()
-
-  if (userId) {
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      include: {
-        workspaceMembers: {
-          include: { workspace: true },
-          take: 1,
-        },
-      },
-    })
-
-    if (user && user.workspaceMembers.length > 0) {
-      redirect(`/${user.workspaceMembers[0].workspace.slug}`)
-    }
-
-    redirect('/onboarding')
-  }
+export default function LandingPage() {
+  const { isSignedIn } = useAuth()
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -78,19 +59,34 @@ export default async function LandingPage() {
             <span className="text-xl font-bold">Sprintix</span>
           </Link>
           <nav className="flex items-center gap-4">
-            <Link
-              href="/sign-in"
-              className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/sign-up"
-              className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              Get Started
-              <ArrowRight className="ml-1.5 size-4" />
-            </Link>
+            {isSignedIn ? (
+              <>
+                <Link
+                  href="/onboarding"
+                  className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  <LayoutDashboard className="mr-1.5 size-4" />
+                  Dashboard
+                </Link>
+                <UserButton />
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/sign-in"
+                  className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/sign-up"
+                  className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  Get Started
+                  <ArrowRight className="ml-1.5 size-4" />
+                </Link>
+              </>
+            )}
           </nav>
         </div>
       </header>
@@ -107,19 +103,31 @@ export default async function LandingPage() {
               amazing work. From sprints to shipping, everything in one place.
             </p>
             <div className="mt-10 flex items-center justify-center gap-4">
-              <Link
-                href="/sign-up"
-                className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-8 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-              >
-                Start Free Trial
-                <ArrowRight className="ml-2 size-4" />
-              </Link>
-              <Link
-                href="/sign-in"
-                className="inline-flex h-11 items-center justify-center rounded-lg border border-border bg-background px-8 text-sm font-medium transition-colors hover:bg-muted"
-              >
-                Sign In
-              </Link>
+              {isSignedIn ? (
+                <Link
+                  href="/onboarding"
+                  className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-8 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  Go to Dashboard
+                  <ArrowRight className="ml-2 size-4" />
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/sign-up"
+                    className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-8 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                  >
+                    Start Free Trial
+                    <ArrowRight className="ml-2 size-4" />
+                  </Link>
+                  <Link
+                    href="/sign-in"
+                    className="inline-flex h-11 items-center justify-center rounded-lg border border-border bg-background px-8 text-sm font-medium transition-colors hover:bg-muted"
+                  >
+                    Sign In
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </section>
@@ -166,13 +174,23 @@ export default async function LandingPage() {
                 Join thousands of teams already shipping faster with Sprintix.
               </p>
               <div className="mt-8">
-                <Link
-                  href="/sign-up"
-                  className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-8 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                >
-                  Get Started Free
-                  <ArrowRight className="ml-2 size-4" />
-                </Link>
+                {isSignedIn ? (
+                  <Link
+                    href="/onboarding"
+                    className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-8 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                  >
+                    Go to Dashboard
+                    <ArrowRight className="ml-2 size-4" />
+                  </Link>
+                ) : (
+                  <Link
+                    href="/sign-up"
+                    className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-8 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                  >
+                    Get Started Free
+                    <ArrowRight className="ml-2 size-4" />
+                  </Link>
+                )}
               </div>
             </div>
           </div>

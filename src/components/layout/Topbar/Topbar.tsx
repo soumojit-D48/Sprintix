@@ -3,20 +3,11 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useUser } from '@clerk/nextjs'
+import { UserButton } from '@clerk/nextjs'
 import { Search, Bell, Menu, Command, ChevronRight, Home } from 'lucide-react'
 import { useUIStore } from '@/stores/ui-store'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { NotificationBell } from '../NotificationBell'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface TopbarProps {
@@ -27,7 +18,6 @@ interface TopbarProps {
 export function Topbar({ workspaceName, projectName }: TopbarProps) {
   const pathname = usePathname()
   const { toggleSidebar, setCommandPaletteOpen } = useUIStore()
-  const { user } = useUser()
 
   const breadcrumbItems = [{ label: workspaceName || 'Workspace', href: `/${workspaceName || ''}` }]
 
@@ -105,25 +95,7 @@ export function Topbar({ workspaceName, projectName }: TopbarProps) {
 
         <NotificationBell />
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-8">
-              <Avatar size="sm">
-                <AvatarImage src={user?.imageUrl ?? ''} />
-                <AvatarFallback>{(user?.firstName?.[0] ?? user?.emailAddresses?.[0]?.emailAddress?.[0] ?? 'U').toUpperCase()}</AvatarFallback>
-              </Avatar>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile</DropdownMenuItem>
-            <DropdownMenuItem>Settings</DropdownMenuItem>
-            <DropdownMenuItem>Billing</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>Sign out</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <UserButton />
       </div>
     </header>
   )

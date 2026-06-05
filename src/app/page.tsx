@@ -1,65 +1,197 @@
-import Image from "next/image";
+import { auth } from '@clerk/nextjs/server'
+import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { prisma } from '@/lib/prisma'
+import {
+  LayoutDashboard,
+  FolderKanban,
+  Users,
+  BarChart3,
+  MessageSquareText,
+  GitFork,
+  ArrowRight,
+  CheckCircle2,
+} from 'lucide-react'
 
-export default function Home() {
+const features = [
+  {
+    icon: LayoutDashboard,
+    title: 'Project Dashboards',
+    description: 'Real-time overview of all your projects with customizable views and widgets.',
+  },
+  {
+    icon: FolderKanban,
+    title: 'Issue Tracking',
+    description: 'Track, prioritize, and resolve issues with powerful kanban boards and lists.',
+  },
+  {
+    icon: GitFork,
+    title: 'Sprint Planning',
+    description: 'Plan and manage sprints effortlessly with timeline views and velocity tracking.',
+  },
+  {
+    icon: Users,
+    title: 'Team Collaboration',
+    description: 'Work together with built-in chat, mentions, and real-time notifications.',
+  },
+  {
+    icon: MessageSquareText,
+    title: 'Team Chat',
+    description: 'Channel-based messaging to keep conversations organized and searchable.',
+  },
+  {
+    icon: BarChart3,
+    title: 'Analytics & Reports',
+    description: 'Data-driven insights with custom reports and burndown charts.',
+  },
+]
+
+export default async function LandingPage() {
+  const { userId } = await auth()
+
+  if (userId) {
+    const user = await prisma.user.findUnique({
+      where: { clerkId: userId },
+      include: {
+        workspaceMembers: {
+          include: { workspace: true },
+          take: 1,
+        },
+      },
+    })
+
+    if (user && user.workspaceMembers.length > 0) {
+      redirect(`/${user.workspaceMembers[0].workspace.slug}`)
+    }
+
+    redirect('/onboarding')
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="flex min-h-screen flex-col">
+      <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="bg-primary flex size-8 items-center justify-center rounded-lg">
+              <span className="text-primary-foreground text-sm font-bold">S</span>
+            </div>
+            <span className="text-xl font-bold">Sprintix</span>
+          </Link>
+          <nav className="flex items-center gap-4">
+            <Link
+              href="/sign-in"
+              className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              Sign in
+            </Link>
+            <Link
+              href="/sign-up"
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
-              Learning
-            </a>{" "}
-            center.
+              Get Started
+              <ArrowRight className="ml-1.5 size-4" />
+            </Link>
+          </nav>
+        </div>
+      </header>
+
+      <main className="flex-1">
+        <section className="mx-auto max-w-7xl px-4 pt-24 pb-16 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
+              Ship faster with{' '}
+              <span className="text-primary">Sprintix</span>
+            </h1>
+            <p className="text-muted-foreground mt-6 text-lg leading-8">
+              The project management platform that helps teams plan, track, and deliver
+              amazing work. From sprints to shipping, everything in one place.
+            </p>
+            <div className="mt-10 flex items-center justify-center gap-4">
+              <Link
+                href="/sign-up"
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-8 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                Start Free Trial
+                <ArrowRight className="ml-2 size-4" />
+              </Link>
+              <Link
+                href="/sign-in"
+                className="inline-flex h-11 items-center justify-center rounded-lg border border-border bg-background px-8 text-sm font-medium transition-colors hover:bg-muted"
+              >
+                Sign In
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        <section className="border-t bg-muted/30 py-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-2xl text-center">
+              <h2 className="text-3xl font-bold tracking-tight">
+                Everything your team needs
+              </h2>
+              <p className="text-muted-foreground mt-4 text-lg">
+                Powerful features to keep your projects on track and your team aligned.
+              </p>
+            </div>
+            <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {features.map((feature) => {
+                const Icon = feature.icon
+                return (
+                  <div
+                    key={feature.title}
+                    className="group relative rounded-lg border border-border bg-card p-6 transition-colors hover:border-border/80"
+                  >
+                    <div className="bg-primary/10 mb-4 flex size-10 items-center justify-center rounded-lg">
+                      <Icon className="text-primary size-5" />
+                    </div>
+                    <h3 className="font-semibold">{feature.title}</h3>
+                    <p className="text-muted-foreground mt-2 text-sm leading-6">
+                      {feature.description}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section className="py-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-2xl text-center">
+              <h2 className="text-3xl font-bold tracking-tight">
+                Ready to get started?
+              </h2>
+              <p className="text-muted-foreground mt-4 text-lg">
+                Join thousands of teams already shipping faster with Sprintix.
+              </p>
+              <div className="mt-8">
+                <Link
+                  href="/sign-up"
+                  className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-8 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  Get Started Free
+                  <ArrowRight className="ml-2 size-4" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="border-t py-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2">
+            <div className="bg-primary flex size-6 items-center justify-center rounded">
+              <span className="text-primary-foreground text-[10px] font-bold">S</span>
+            </div>
+            <span className="text-muted-foreground text-sm">Sprintix</span>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            &copy; {new Date().getFullYear()} Sprintix. All rights reserved.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </footer>
     </div>
-  );
+  )
 }

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useUser } from '@clerk/nextjs'
 import {
   LayoutDashboard,
   FolderKanban,
@@ -70,6 +71,7 @@ const mainNavItems: NavItem[] = [
 export function Sidebar({ workspaces, currentWorkspace, projects, channels }: SidebarProps) {
   const pathname = usePathname()
   const { sidebarCollapsed, toggleSidebarCollapsed } = useUIStore()
+  const { user } = useUser()
   const [projectsOpen, setProjectsOpen] = useState(true)
   const [chatOpen, setChatOpen] = useState(true)
 
@@ -203,11 +205,11 @@ export function Sidebar({ workspaces, currentWorkspace, projects, channels }: Si
       <div className="border-t p-3">
         <div className="flex items-center gap-2">
           <Avatar size="sm">
-            <AvatarImage src="" />
-            <AvatarFallback>U</AvatarFallback>
+            <AvatarImage src={user?.imageUrl ?? ''} />
+            <AvatarFallback>{(user?.firstName?.[0] ?? user?.emailAddresses?.[0]?.emailAddress?.[0] ?? 'U').toUpperCase()}</AvatarFallback>
           </Avatar>
           <div className="flex-1 truncate">
-            <div className="truncate text-sm font-medium">User</div>
+            <div className="truncate text-sm font-medium">{user?.fullName ?? user?.emailAddresses?.[0]?.emailAddress ?? 'User'}</div>
             <div className="text-muted-foreground text-xs">Free</div>
           </div>
           <Link href={`${workspaceBase}/settings`}>

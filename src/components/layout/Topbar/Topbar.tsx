@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useUser } from '@clerk/nextjs'
 import { Search, Bell, Menu, Command, ChevronRight, Home } from 'lucide-react'
 import { useUIStore } from '@/stores/ui-store'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -26,6 +27,7 @@ interface TopbarProps {
 export function Topbar({ workspaceName, projectName }: TopbarProps) {
   const pathname = usePathname()
   const { toggleSidebar, setCommandPaletteOpen } = useUIStore()
+  const { user } = useUser()
 
   const breadcrumbItems = [{ label: workspaceName || 'Workspace', href: `/${workspaceName || ''}` }]
 
@@ -107,8 +109,8 @@ export function Topbar({ workspaceName, projectName }: TopbarProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="size-8">
               <Avatar size="sm">
-                <AvatarImage src="" />
-                <AvatarFallback>U</AvatarFallback>
+                <AvatarImage src={user?.imageUrl ?? ''} />
+                <AvatarFallback>{(user?.firstName?.[0] ?? user?.emailAddresses?.[0]?.emailAddress?.[0] ?? 'U').toUpperCase()}</AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>

@@ -64,6 +64,7 @@ const mainNavItems: NavItem[] = [
   { title: 'Chat', href: '/[workspaceSlug]/chat', icon: MessageSquareText },
   { title: 'Members', href: '/[workspaceSlug]/members', icon: Users },
   { title: 'Analytics', href: '/[workspaceSlug]/analytics', icon: BarChart3 },
+  { title: 'Settings', href: '/[workspaceSlug]/settings', icon: BarChart3 },
 ]
 
 export function Sidebar({ workspaces, currentWorkspace, projects, channels }: SidebarProps) {
